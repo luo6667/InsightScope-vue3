@@ -1,7 +1,8 @@
 ﻿import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Database, Download, Pause, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { deleteDataset, exportComments, pullFeedNow, startFeedPull, stopFeedPull } from "../api/api";
 import { Badge, Button, Card, CardSkeleton, EmptyState, PageHeader } from "../components/ui";
@@ -18,7 +19,10 @@ export default function DatasetsPage() {
 
   const del = useMutation({
     mutationFn: deleteDataset,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["datasets"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["datasets"] });
+      toast.success("数据集已删除");
+    },
     onError: (e) => setActionError(`删除失败：${errMsg(e)}`),
   });
   const feedStart = useMutation({
@@ -33,7 +37,10 @@ export default function DatasetsPage() {
   });
   const feedPull = useMutation({
     mutationFn: pullFeedNow,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["datasets"] }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["datasets"] });
+      toast.success(`抓取完成，新增 ${r.count} 条评论`);
+    },
     onError: (e) => setActionError(`抓取失败：${errMsg(e)}`),
   });
 
@@ -43,7 +50,7 @@ export default function DatasetsPage() {
         title="数据集"
         desc="评论数据源，选择后进入监控台与分析"
         extra={
-          <Link to="/import">
+          <Link href="/import">
             <Button variant="primary">
               <Plus size={15} />
               导入数据
@@ -70,7 +77,7 @@ export default function DatasetsPage() {
             title="还没有数据集"
             desc="导入内置场景 / 粘贴评论 / CSV 文件 / URL 定时抓取，四种方式任选"
             action={
-              <Link to="/import">
+              <Link href="/import">
                 <Button variant="primary">
                   <Plus size={15} />
                   去导入
@@ -141,13 +148,13 @@ export default function DatasetsPage() {
               <Button size="sm" variant="ghost" title="导出 CSV" onClick={() => exportComments(d.id, "csv")}>
                 <Download size={12} />
               </Button>
-              <Link to={`/dashboard?dataset=${d.id}`}>
+              <Link href={`/dashboard?dataset=${d.id}`}>
                 <Button size="sm">
                   监控台
                   <ArrowRight size={13} />
                 </Button>
               </Link>
-              <Link to={`/analysis?dataset=${d.id}`}>
+              <Link href={`/analysis?dataset=${d.id}`}>
                 <Button size="sm">分析</Button>
               </Link>
               <Button

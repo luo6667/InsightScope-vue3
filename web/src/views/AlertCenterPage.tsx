@@ -1,6 +1,7 @@
 ﻿import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellRing, Check, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { ackAlert, createRule, deleteRule, updateRule } from "../api/api";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../components/ui";
@@ -169,6 +170,7 @@ function RuleForm({ datasetId }: { datasetId: string }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rules", datasetId] });
       setKeyword("");
+      toast.success("告警规则已创建");
     },
     onError: (e) => setError(e instanceof Error ? e.message : String(e)),
   });

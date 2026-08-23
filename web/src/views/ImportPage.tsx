@@ -1,7 +1,8 @@
 ﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ClipboardPaste, Clock, FileDown, FileSpreadsheet, FileUp, MessagesSquare, Radio, UploadCloud } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { createFeedDataset, createScenarioDataset, importComments, listScenarios } from "../api/api";
 import type { ScenarioInfo } from "../api/types";
@@ -10,14 +11,14 @@ import { csvImportSchema, feedImportSchema, firstError, pasteImportSchema } from
 
 export default function ImportPage() {
   const qc = useQueryClient();
-  const navigate = useNavigate();
+  const router = useRouter();
   const { data: scenarios } = useQuery({ queryKey: ["scenarios"], queryFn: listScenarios });
 
   const create = useMutation({
     mutationFn: (scenarioId: string) => createScenarioDataset(scenarioId),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["datasets"] });
-      navigate(`/dashboard?dataset=${r.id}`);
+      router.push(`/dashboard?dataset=${r.id}`);
     },
   });
 
@@ -46,7 +47,7 @@ export default function ImportPage() {
         粘贴评论导入
       </h2>
       <div className="mt-3">
-        <PasteImport onCreate={(name, comments) => importComments(comments, name)} onDone={(id) => navigate(`/dashboard?dataset=${id}`)} />
+        <PasteImport onCreate={(name, comments) => importComments(comments, name)} onDone={(id) => router.push(`/dashboard?dataset=${id}`)} />
       </div>
 
       <h2 className="mt-9 flex items-center gap-2 text-sm font-medium text-ink-200">
@@ -54,7 +55,7 @@ export default function ImportPage() {
         CSV 文件导入
       </h2>
       <div className="mt-3">
-        <CsvImport onCreate={(comments) => importComments(comments)} onDone={(id) => navigate(`/dashboard?dataset=${id}`)} />
+        <CsvImport onCreate={(comments) => importComments(comments)} onDone={(id) => router.push(`/dashboard?dataset=${id}`)} />
       </div>
 
       <h2 className="mt-9 flex items-center gap-2 text-sm font-medium text-ink-200">
@@ -62,7 +63,7 @@ export default function ImportPage() {
         URL 定时抓取
       </h2>
       <div className="mt-3">
-        <FeedImport onCreate={(name, url, interval) => createFeedDataset(name, url, interval)} onDone={(id) => navigate(`/dashboard?dataset=${id}`)} />
+        <FeedImport onCreate={(name, url, interval) => createFeedDataset(name, url, interval)} onDone={(id) => router.push(`/dashboard?dataset=${id}`)} />
       </div>
     </div>
   );
@@ -132,6 +133,7 @@ function PasteImport({ onCreate, onDone }: { onCreate: (name: string, c: unknown
     setError(null);
     try {
       const r = await onCreate(n ?? "", comments.map((content) => ({ content, analyzed: false })));
+      toast.success(`导入成功，共 ${r.count} 条评论`);
       onDone(r.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -280,6 +282,7 @@ function CsvImport({ onCreate, onDone }: { onCreate: (c: unknown[]) => Promise<{
           analyzed: false,
         }))
       );
+      toast.success(`CSV 导入成功，共 ${r.count} 条评论`);
       onDone(r.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -357,7 +360,7 @@ function FeedImport({
   onCreate,
   onDone,
 }: {
-  onCreate: (name: string, url: string, interval: number) => Promise<{ id: string }>;
+  onCreate: (name: string, url: string, interval: number) => Promise<{ id: string; count: number }>;
   onDone: (id: string) => void;
 }) {
   const [name, setName] = useState("");
@@ -377,6 +380,7 @@ function FeedImport({
     setError(null);
     try {
       const r = await onCreate(n ?? "定时抓取数据源", u, intervalMin);
+      toast.success(r.count > 0 ? `抓取导入成功，共 ${r.count} 条评论` : "数据集已创建，将按设定间隔自动抓取");
       onDone(r.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

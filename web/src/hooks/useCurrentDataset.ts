@@ -1,5 +1,5 @@
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
 
 import { useWorkspace } from "../store/workspace";
 
@@ -10,7 +10,8 @@ import { useWorkspace } from "../store/workspace";
  * - 选择器变更时同步 URL + store（保留其他查询参数）
  */
 export function useCurrentDataset(): { datasetId: string; setDatasetId: (id: string) => void } {
-  const [params, setParams] = useSearchParams();
+  const params = useSearchParams();
+  const router = useRouter();
   const urlDs = params.get("dataset") ?? "";
   const storeDs = useWorkspace((s) => s.datasetId);
   const setStoreDs = useWorkspace((s) => s.setDatasetId);
@@ -24,15 +25,12 @@ export function useCurrentDataset(): { datasetId: string; setDatasetId: (id: str
 
   const setDatasetId = (id: string) => {
     setStoreDs(id);
-    setParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (id) next.set("dataset", id);
-        else next.delete("dataset");
-        return next;
-      },
-      { replace: true }
-    );
+    // 同步 URL ?dataset=（保留其他查询参数）
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("dataset", id);
+    else next.delete("dataset");
+    const qs = next.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
   };
 
   return { datasetId, setDatasetId };

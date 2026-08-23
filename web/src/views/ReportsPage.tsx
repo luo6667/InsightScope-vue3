@@ -1,5 +1,6 @@
 import { Clock, FileDown, FileText, Loader2, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import type { DatasetStats } from "../api/types";
 import { Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
@@ -134,6 +135,7 @@ export default function ReportsPage() {
     const next = [item, ...loadHistory()].slice(0, 100);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
     setHistory(next.filter((h) => h.datasetId === datasetId));
+    toast.success("舆情周报已生成并保存到历史");
   }, [report, generating, datasetId]);
 
   const exportMd = (text: string) => {

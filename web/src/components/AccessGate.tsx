@@ -1,3 +1,5 @@
+'use client';
+
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, Lock } from "lucide-react";
 import { type FormEvent,useEffect, useState } from "react";
@@ -14,7 +16,7 @@ import { Button, Card, Field, Input } from "./ui";
  * - 提交后用真实请求验证口令，通过才解锁并刷新数据。
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
 type GateState = "checking" | "locked" | "open";
 

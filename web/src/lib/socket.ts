@@ -4,10 +4,16 @@ import { getAccessToken, notifyUnauthorized } from "./auth";
 
 let socket: Socket | null = null;
 
+/**
+ * socket.io 连接地址：
+ * Next.js rewrites 不支持 WebSocket，socket 必须直连 Express（不走 /api 代理）。
+ * 开发默认直连本地后端 5176；生产同域反代时设 NEXT_PUBLIC_SOCKET_URL=""（同源）即可。
+ */
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:5176";
+
 export function getSocket(): Socket {
   if (!socket) {
-    // 生产部署到独立域名时用 VITE_SOCKET_URL 覆盖；默认同源
-    socket = io(import.meta.env.VITE_SOCKET_URL ?? "/", {
+    socket = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       // 握手携带访问口令（后端 ACCESS_TOKEN 启用时校验，未启用则忽略）
       auth: { token: getAccessToken() },

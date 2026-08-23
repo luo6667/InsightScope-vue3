@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import nextVitals from 'eslint-config-next/core-web-vitals';
 import tseslint from 'typescript-eslint';
 import react from 'eslint-plugin-react';
 import reactCompiler from 'eslint-plugin-react-compiler';
@@ -9,8 +10,11 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default tseslint.config(
+  // Next.js 官方规则（Babel parser + 规则；parser 会被后面的 TS 块覆盖）
+  ...nextVitals,
+
   // 全局忽略
-  { ignores: ['dist', 'node_modules'] },
+  { ignores: ['.next', 'dist', 'node_modules'] },
 
   // 基础 JS/TS 规则
   // 注意：用 recommended（非 strictTypeChecked）——既有代码含 axios any / void promise 等写法，
@@ -68,6 +72,14 @@ export default tseslint.config(
       // 允许不显式声明返回类型（TS 推导足够好）
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
+    },
+  },
+
+  // Next.js App Router 文件（layout/page 可导出 metadata 等非组件符号，无需 fast refresh）
+  {
+    files: ['src/app/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 

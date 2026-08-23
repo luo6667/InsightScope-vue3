@@ -1,5 +1,6 @@
 ﻿import { BookMarked, Check, KeyRound, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button, Card, CardHeader, Field, Input, PageHeader, Textarea } from "../components/ui";
 import { getCustomDict, setCustomDict } from "../lib/customDict";
@@ -9,9 +10,7 @@ import { useSettings } from "../store/settings";
 export default function SettingsPage() {
   const s = useSettings();
   const [draft, setDraft] = useState({ ...s });
-  const [saved, setSaved] = useState(false);
   const [dictText, setDictText] = useState(getCustomDict().join("\n"));
-  const [dictSaved, setDictSaved] = useState(false);
 
   // zod 字段级校验（语义与原手写 ASCII 检查一致，并覆盖长度/范围）
   const parsed = aiSettingsSchema.safeParse(draft);
@@ -26,15 +25,13 @@ export default function SettingsPage() {
     const cleanKey = apiKey.replace(/\s+/g, "");
     s.update({ ...draft, apiKey: cleanKey, baseUrl, model, temperature });
     setDraft({ ...draft, apiKey: cleanKey, baseUrl, model, temperature });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    toast.success("AI 服务设置已保存");
   };
 
   const saveDict = () => {
     const words = dictText.split(/[\n,，、]+/).map((w) => w.trim()).filter(Boolean);
     setCustomDict(words);
-    setDictSaved(true);
-    setTimeout(() => setDictSaved(false), 1500);
+    toast.success("自定义词典已保存（词云统计生效）");
   };
 
   return (
@@ -94,8 +91,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center gap-3 pt-1">
             <Button variant="primary" onClick={save} disabled={keyInvalid || urlInvalid}>
-              {saved ? <Check size={15} /> : null}
-              {saved ? "已保存" : "保存设置"}
+              保存设置
             </Button>
           </div>
         </div>
@@ -126,8 +122,7 @@ export default function SettingsPage() {
           </Field>
           <div className="mt-4">
             <Button variant="primary" onClick={saveDict}>
-              {dictSaved ? <Check size={15} /> : null}
-              {dictSaved ? "已保存" : "保存词典"}
+              保存词典
             </Button>
           </div>
         </div>

@@ -1,24 +1,20 @@
-﻿import { useQueryClient } from "@tanstack/react-query";
-import type { EChartsOption } from "echarts";
+import { useQueryClient } from "@tanstack/react-query";
 import { Activity, Bell, Gauge, Info, MessageSquareText, Pause, Play, Radar, Scale, Tags, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { setSimSpeed, startSimulate, stopSimulate } from "../api/api";
-import type { Alert, CommentRow, DatasetStats } from "../api/types";
+import type { Alert, CommentRow } from "../api/types";
 import CommentModal from "../components/CommentModal";
+import NotAnalyzed from "../components/dashboard/NotAnalyzed";
+import { compareDonut, donutOption, pct, SENTIMENT, topicOption, trendOption, wordcloudOption } from "../components/dashboard/options";
+import RangeField from "../components/dashboard/RangeField";
 import EChart from "../components/EChart";
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Select, Skeleton, StatCard } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
 import { useComments,useDatasets, useDatasetStats } from "../hooks/useData";
 import { useDatasetSocket } from "../hooks/useDatasetSocket";
 import { customDictKey } from "../lib/customDict";
-
-const SENTIMENT = {
-  pos: { label: "正面", color: "#34d399", dot: "bg-emerald-400" },
-  neu: { label: "中性", color: "#60a5fa", dot: "bg-sky-400" },
-  neg: { label: "负面", color: "#f87171", dot: "bg-red-400" },
-} as const;
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -137,8 +133,8 @@ export default function DashboardPage() {
 
   const current = datasets?.find((d) => d.id === datasetId);
 
-  // 图表 option 用 useMemo 缓存：stats 不变时引用稳定，避免实时流入重渲染触发全图重绘/词云颜色抖动
-  const chartOptions = useMemo(() => {
+  // 图表 option（React Compiler 自动记忆化，stats 不变时引用稳定，避免实时流入重渲染触发全图重绘）
+  const chartOptions = (() => {
     if (!stats) return null;
     return {
       donut: donutOption(stats),
@@ -146,7 +142,7 @@ export default function DashboardPage() {
       topic: topicOption(stats),
       wordcloud: wordcloudOption(stats),
     };
-  }, [stats]);
+  })();
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -464,146 +460,4 @@ export default function DashboardPage() {
       />
     </div>
   );
-}
-
-function RangeField({ label, range, onChange }: { label: string; range: { from: string; to: string }; onChange: (r: { from: string; to: string }) => void }) {
-  const inputCls = "h-8 rounded-lg border border-ink-700 bg-ink-950 px-2 text-xs text-ink-100 outline-none focus:border-accent-500";
-  return (
-    <div className="flex items-end gap-2">
-      <span className="pb-1.5 text-xs font-medium text-ink-300">{label}</span>
-      <input type="date" value={range.from} onChange={(e) => onChange({ ...range, from: e.target.value })} className={inputCls} />
-      <span className="pb-1.5 text-ink-400">~</span>
-      <input type="date" value={range.to} onChange={(e) => onChange({ ...range, to: e.target.value })} className={inputCls} />
-    </div>
-  );
-}
-
-function pct(stats: DatasetStats, key: "pos" | "neg"): string {
-  return stats.total ? `${Math.round((stats.sentiment[key] / stats.total) * 100)}%` : "0%";
-}
-
-function NotAnalyzed({ h }: { h: string }) {
-  return (
-    <div className={`flex ${h} items-center justify-center rounded-lg border border-dashed border-ink-700 text-[13px] text-ink-400`}>
-      尚未分析，待 AI 分析后展示
-    </div>
-  );
-}
-
-function donutOption(stats: DatasetStats): EChartsOption {
-  return {
-    tooltip: { trigger: "item", backgroundColor: "#152238", borderWidth: 0, textStyle: { color: "#eef2fa" } },
-    legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: "#a2b2c9", fontSize: 11 } },
-    series: [
-      {
-        type: "pie",
-        radius: ["46%", "72%"],
-        center: ["50%", "44%"],
-        label: { show: false },
-        itemStyle: { borderColor: "#101a2b", borderWidth: 2 },
-        data: [
-          { name: "正面", value: stats.sentiment.pos, itemStyle: { color: SENTIMENT.pos.color } },
-          { name: "中性", value: stats.sentiment.neu, itemStyle: { color: SENTIMENT.neu.color } },
-          { name: "负面", value: stats.sentiment.neg, itemStyle: { color: SENTIMENT.neg.color } },
-        ],
-      },
-    ],
-  };
-}
-
-function compareDonut(stats: DatasetStats): EChartsOption {
-  return {
-    tooltip: { trigger: "item", backgroundColor: "#152238", borderWidth: 0, textStyle: { color: "#eef2fa" } },
-    series: [
-      {
-        type: "pie",
-        radius: ["50%", "75%"],
-        label: { color: "#c3cede", fontSize: 11, formatter: "{b} {c}" },
-        itemStyle: { borderColor: "#101a2b", borderWidth: 2 },
-        data: [
-          { name: "正面", value: stats.sentiment.pos, itemStyle: { color: SENTIMENT.pos.color } },
-          { name: "中性", value: stats.sentiment.neu, itemStyle: { color: SENTIMENT.neu.color } },
-          { name: "负面", value: stats.sentiment.neg, itemStyle: { color: SENTIMENT.neg.color } },
-        ],
-      },
-    ],
-  };
-}
-
-function trendOption(stats: DatasetStats): EChartsOption {
-  return {
-    tooltip: { trigger: "axis", backgroundColor: "#152238", borderWidth: 0, textStyle: { color: "#eef2fa" } },
-    legend: { top: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: "#a2b2c9", fontSize: 11 } },
-    grid: { left: 36, right: 14, top: 30, bottom: 22 },
-    xAxis: {
-      type: "category",
-      data: stats.trend.map((t) => t.date.slice(5)),
-      axisLabel: { color: "#7e8fa9", fontSize: 11 },
-      axisLine: { lineStyle: { color: "#2f4063" } },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: { color: "#7e8fa9", fontSize: 11 },
-      splitLine: { lineStyle: { color: "#152238" } },
-    },
-    series: [
-      { name: "正面", type: "line", smooth: true, showSymbol: false, data: stats.trend.map((t) => t.pos), lineStyle: { color: SENTIMENT.pos.color, width: 2 }, itemStyle: { color: SENTIMENT.pos.color }, areaStyle: { color: "rgba(52,211,153,0.12)" } },
-      { name: "中性", type: "line", smooth: true, showSymbol: false, data: stats.trend.map((t) => t.neu), lineStyle: { color: SENTIMENT.neu.color, width: 2 }, itemStyle: { color: SENTIMENT.neu.color }, areaStyle: { color: "rgba(96,165,250,0.10)" } },
-      { name: "负面", type: "line", smooth: true, showSymbol: false, data: stats.trend.map((t) => t.neg), lineStyle: { color: SENTIMENT.neg.color, width: 2 }, itemStyle: { color: SENTIMENT.neg.color }, areaStyle: { color: "rgba(248,113,113,0.14)" } },
-    ],
-  };
-}
-
-function topicOption(stats: DatasetStats): EChartsOption {
-  const top = stats.topics.slice(0, 8).reverse();
-  return {
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: "#152238", borderWidth: 0, textStyle: { color: "#eef2fa" } },
-    grid: { left: 8, right: 26, top: 6, bottom: 6, containLabel: true },
-    xAxis: { type: "value", axisLabel: { color: "#7e8fa9", fontSize: 11 }, splitLine: { lineStyle: { color: "#152238" } } },
-    yAxis: {
-      type: "category",
-      data: top.map((t) => t.name),
-      axisLabel: { color: "#c3cede", fontSize: 12 },
-      axisLine: { show: false },
-      axisTick: { show: false },
-    },
-    series: [
-      {
-        type: "bar",
-        data: top.map((t, i) => ({
-          value: t.count,
-          itemStyle: { color: i >= top.length - 3 ? "#f87171" : "#fbbf24", borderRadius: [0, 4, 4, 0] },
-        })),
-        barWidth: 14,
-      },
-    ],
-  };
-}
-
-function wordcloudOption(stats: DatasetStats): EChartsOption {
-  // 圆形散落词云（评价词典提取的真词），仅水平排布保持可读
-  // 颜色按词名稳定 hash，避免每次渲染随机变色抖动
-  const colorOf = (name: string) => {
-    let h = 0;
-    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 50;
-    return `hsl(${36 + h}, 65%, 62%)`;
-  };
-  return {
-    tooltip: { backgroundColor: "#152238", borderWidth: 0, textStyle: { color: "#eef2fa" } },
-    series: [
-      {
-        type: "wordCloud",
-        shape: "circle",
-        width: "100%",
-        height: "100%",
-        sizeRange: [13, 36],
-        rotationRange: [0, 0],
-        layoutAnimation: true,
-        textStyle: {
-          color: (p: { name?: string }) => colorOf(p?.name ?? "词"),
-        },
-        data: stats.keywords.map((k) => ({ name: k.word, value: k.count })),
-      },
-    ],
-  };
 }
