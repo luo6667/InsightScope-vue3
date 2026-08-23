@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, Pencil, X } from "lucide-react";
 import { updateComment } from "../api/api";
 import { Badge, Button, Input } from "./ui";

@@ -176,7 +176,7 @@ app.use("/api", (_req, res) => {
 // 生产部署：托管前端构建产物（web/dist），未命中静态文件时回退 index.html（SPA）
 const distDir = path.resolve(WEB_DIST);
 app.use(express.static(distDir));
-app.get("*", (req, res, next) => {
+app.get("/{*splat}", (req, res, next) => {
   if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) return next();
   res.sendFile(path.join(distDir, "index.html"), (err) => {
     if (err) next();

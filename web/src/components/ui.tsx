@@ -1,5 +1,5 @@
 ﻿import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 /* ---------- 按钮 ---------- */
 type BtnVariant = "primary" | "ghost" | "danger" | "outline";

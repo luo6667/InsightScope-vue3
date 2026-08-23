@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { AlertTriangle, BrainCircuit, Eraser, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { cancelAnalysis, pauseAnalysis, resetAnalysis, resumeAnalysis, startAnalysis } from "../api/api";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";

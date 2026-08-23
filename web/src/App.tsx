@@ -1,4 +1,4 @@
-﻿import { AnimatePresence, motion } from "framer-motion";
+﻿import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense } from "react";
 import { Bell, BrainCircuit, Database, FileText, Gauge, Loader2, Moon, Radar, Settings, Sun, Upload } from "lucide-react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";

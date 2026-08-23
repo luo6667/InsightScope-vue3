@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Activity, Bell, Gauge, Info, MessageSquareText, Pause, Play, Radar, Scale, Tags, X } from "lucide-react";
 import type { EChartsOption } from "echarts";
 import { setSimSpeed, startSimulate, stopSimulate } from "../api/api";
