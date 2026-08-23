@@ -6,6 +6,7 @@ import { ackAlert, createRule, deleteRule, updateRule } from "../api/api";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
 import { useAlertRules, useAlerts,useDatasets } from "../hooks/useData";
+import { alertRuleSchema, firstError } from "../lib/validation";
 
 const typeLabel: Record<string, string> = {
   negativity: "负面率阈值",
@@ -174,11 +175,18 @@ function RuleForm({ datasetId }: { datasetId: string }) {
 
   const submit = () => {
     setError(null);
-    add.mutate({
-      datasetId,
+    const parsed = alertRuleSchema.safeParse({
       type,
       threshold: type === "keyword" ? 1 : Number(threshold),
-      keyword: type === "keyword" ? keyword.trim() : undefined,
+      keyword: type === "keyword" ? keyword.trim() : "",
+    });
+    if (!parsed.success) {
+      setError(firstError(parsed.error));
+      return;
+    }
+    add.mutate({
+      datasetId,
+      ...parsed.data,
     });
   };
 

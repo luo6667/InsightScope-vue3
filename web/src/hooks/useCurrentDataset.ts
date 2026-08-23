@@ -18,8 +18,7 @@ export function useCurrentDataset(): { datasetId: string; setDatasetId: (id: str
   // URL 带参（跳转）时同步进 store
   useEffect(() => {
     if (urlDs && urlDs !== storeDs) setStoreDs(urlDs);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlDs]);
+  }, [urlDs, storeDs, setStoreDs]);
 
   const datasetId = urlDs || storeDs;
 

@@ -57,6 +57,11 @@ export default function ReportsPage() {
 
   const { data: datasets } = useDatasets();
   const { data: stats } = useDatasetStats(datasetId);
+  // 冻结 datasets 引用：历史保存 effect 不依赖它，避免 react-query 引用变化触发重复保存
+  const datasetsRef = useRef(datasets);
+  useEffect(() => {
+    datasetsRef.current = datasets;
+  }, [datasets]);
 
   const [report, setReport] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -118,7 +123,7 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!report || generating || !datasetId) return;
     if (genDatasetRef.current !== datasetId) return; // 本次报告属于其他数据集，不写入当前数据集历史
-    const datasetName = datasets?.find((d) => d.id === datasetId)?.name ?? "数据集";
+    const datasetName = datasetsRef.current?.find((d) => d.id === datasetId)?.name ?? "数据集";
     const item: SavedReport = {
       id: `${Date.now()}`,
       datasetId,
@@ -129,7 +134,6 @@ export default function ReportsPage() {
     const next = [item, ...loadHistory()].slice(0, 100);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
     setHistory(next.filter((h) => h.datasetId === datasetId));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report, generating, datasetId]);
 
   const exportMd = (text: string) => {

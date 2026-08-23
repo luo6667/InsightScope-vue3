@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import react from 'eslint-plugin-react';
+import reactCompiler from 'eslint-plugin-react-compiler';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
@@ -27,6 +28,7 @@ export default tseslint.config(
     },
     plugins: {
       react,
+      'react-compiler': reactCompiler,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
       'simple-import-sort': simpleImportSort,
@@ -41,6 +43,8 @@ export default tseslint.config(
       ...react.configs.recommended.rules,
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
+      // React Compiler：编译期自动记忆化，hook 规则由编译器校验（memo 等手动优化不再需要）
+      'react-compiler/react-compiler': 'error',
       // hooks v7 新增规则：既有代码在 effect 中同步 setState 是既定模式，保持行为不变
       'react-hooks/set-state-in-effect': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],

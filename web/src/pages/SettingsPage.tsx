@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Button, Card, CardHeader, Field, Input, PageHeader, Textarea } from "../components/ui";
 import { getCustomDict, setCustomDict } from "../lib/customDict";
+import { aiSettingsSchema, fieldErrors } from "../lib/validation";
 import { useSettings } from "../store/settings";
 
 export default function SettingsPage() {
@@ -12,17 +13,19 @@ export default function SettingsPage() {
   const [dictText, setDictText] = useState(getCustomDict().join("\n"));
   const [dictSaved, setDictSaved] = useState(false);
 
-  const keyClean = draft.apiKey.trim().replace(/\s+/g, "");
-  const keyInvalid = !!draft.apiKey && !/^[\x20-\x7e]+$/.test(keyClean);
-  const urlInvalid = !!draft.baseUrl.trim() && !/^[\x20-\x7e]+$/.test(draft.baseUrl.trim());
+  // zod 字段级校验（语义与原手写 ASCII 检查一致，并覆盖长度/范围）
+  const parsed = aiSettingsSchema.safeParse(draft);
+  const errs = parsed.success ? {} : fieldErrors(parsed.error);
+  const keyInvalid = !!errs.apiKey;
+  const urlInvalid = !!errs.baseUrl;
 
   const save = () => {
-    if (keyInvalid || urlInvalid) return;
-    // temperature 防 NaN / 越界
-    const rawTemp = Number(draft.temperature);
-    const temperature = Number.isFinite(rawTemp) ? Math.min(2, Math.max(0, rawTemp)) : 0.2;
-    s.update({ ...draft, apiKey: keyClean, baseUrl: draft.baseUrl.trim(), temperature });
-    setDraft({ ...draft, apiKey: keyClean, baseUrl: draft.baseUrl.trim(), temperature });
+    if (!parsed.success) return;
+    const { apiKey, baseUrl, model, temperature } = parsed.data;
+    // key 去掉所有空白（sk- 格式），其余字段已由 schema trim / 范围校验
+    const cleanKey = apiKey.replace(/\s+/g, "");
+    s.update({ ...draft, apiKey: cleanKey, baseUrl, model, temperature });
+    setDraft({ ...draft, apiKey: cleanKey, baseUrl, model, temperature });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };

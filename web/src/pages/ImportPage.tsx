@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { createFeedDataset, createScenarioDataset, importComments, listScenarios } from "../api/api";
 import type { ScenarioInfo } from "../api/types";
 import { Button, Card, Field, Input, PageHeader, Textarea } from "../components/ui";
+import { csvImportSchema, feedImportSchema, firstError, pasteImportSchema } from "../lib/validation";
 
 export default function ImportPage() {
   const qc = useQueryClient();
@@ -118,12 +119,19 @@ function PasteImport({ onCreate, onDone }: { onCreate: (name: string, c: unknown
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (lines.length === 0) return;
+    const parsed = pasteImportSchema.safeParse({
+      name,
+      comments: text.split("\n").map((l) => l.trim()).filter(Boolean),
+    });
+    if (!parsed.success) {
+      setError(firstError(parsed.error));
+      return;
+    }
+    const { name: n, comments } = parsed.data;
     setLoading(true);
     setError(null);
     try {
-      const r = await onCreate(name.trim(), lines.map((content) => ({ content, analyzed: false })));
+      const r = await onCreate(n ?? "", comments.map((content) => ({ content, analyzed: false })));
       onDone(r.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -255,11 +263,16 @@ function CsvImport({ onCreate, onDone }: { onCreate: (c: unknown[]) => Promise<{
 
   const submit = async () => {
     if (!rows || rows.length === 0) return;
+    const parsed = csvImportSchema.safeParse({ rows });
+    if (!parsed.success) {
+      setError(firstError(parsed.error));
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const r = await onCreate(
-        rows.map((row) => ({
+        parsed.data.rows.map((row) => ({
           content: row.content,
           author: row.author,
           platform: row.platform,
@@ -354,11 +367,16 @@ function FeedImport({
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    if (!url.trim()) return;
+    const parsed = feedImportSchema.safeParse({ name, url, intervalMin: interval });
+    if (!parsed.success) {
+      setError(firstError(parsed.error));
+      return;
+    }
+    const { name: n, url: u, intervalMin } = parsed.data;
     setLoading(true);
     setError(null);
     try {
-      const r = await onCreate(name.trim() || "定时抓取数据源", url.trim(), interval);
+      const r = await onCreate(n ?? "定时抓取数据源", u, intervalMin);
       onDone(r.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
