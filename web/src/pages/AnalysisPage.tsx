@@ -1,13 +1,14 @@
-﻿import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
+﻿import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BrainCircuit, Eraser, Pause, Play, RotateCcw, Square } from "lucide-react";
+import { motion } from "motion/react";
+import { useState } from "react";
+
 import { cancelAnalysis, pauseAnalysis, resetAnalysis, resumeAnalysis, startAnalysis } from "../api/api";
+import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
-import { useDatasets, useAnalysisJob } from "../hooks/useData";
+import { useAnalysisJob,useDatasets } from "../hooks/useData";
 import { useDatasetSocket } from "../hooks/useDatasetSocket";
 import { useSettings } from "../store/settings";
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
 
 const jobTone: Record<string, "neutral" | "pos" | "neg" | "accent"> = {
   pending: "neutral",

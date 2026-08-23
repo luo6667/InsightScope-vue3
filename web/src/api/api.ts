@@ -1,4 +1,4 @@
-import { get, post, del, patch } from "./client";
+import { del, get, patch,post } from "./client";
 import type { Alert, AlertRule, AnalysisJob, CommentRow, DatasetInfo, DatasetStats, ScenarioInfo } from "./types";
 
 // 数据集

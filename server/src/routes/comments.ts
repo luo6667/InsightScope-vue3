@@ -3,7 +3,17 @@ import { Op } from "sequelize";
 import { sequelize } from "../db.js";
 import { CommentModel } from "../models.js";
 import { countKeywords } from "../services/textService.js";
-import type { Sentiment } from "../types.js";
+import {
+  validate,
+  paramsOf,
+  ValidatedRequest,
+  commentListQuerySchema,
+  exportQuerySchema,
+  statsQuerySchema,
+  datasetIdParamSchema,
+  commentParamSchema,
+  patchCommentBodySchema,
+} from "../validation.js";
 
 const router = Router();
 
@@ -12,45 +22,41 @@ function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (m) => `\\${m}`);
 }
 
-function timeFilter(req: { query: Record<string, unknown> }): { timestamp?: { [Op.gte]?: Date; [Op.lte]?: Date } } {
+/** 时间过滤（query 已由 zod 校验为 Date） */
+function timeFilter(q: Record<string, unknown>): { timestamp?: { [Op.gte]?: Date; [Op.lte]?: Date } } {
   const f: { timestamp?: { [Op.gte]?: Date; [Op.lte]?: Date } } = {};
-  if (req.query.from) f.timestamp = { ...f.timestamp, [Op.gte]: new Date(String(req.query.from)) };
-  if (req.query.to) f.timestamp = { ...f.timestamp, [Op.lte]: new Date(String(req.query.to)) };
-  // 注意：不能再用 Object.keys(...).length 判断——Op.gte/Op.lte 是 symbol 键，Object.keys 数不到
+  if (q.from) f.timestamp = { ...f.timestamp, [Op.gte]: q.from as Date };
+  if (q.to) f.timestamp = { ...f.timestamp, [Op.lte]: q.to as Date };
   return f.timestamp ? f : {};
 }
 
 /** 构造评论列表共用过滤条件（datasetId + 时间 + 情感 + 主题 + 关键词搜索） */
-function buildFilter(req: { query: Record<string, unknown> }, datasetId: string): Record<string, unknown> {
-  const filter: Record<PropertyKey, unknown> = { datasetId, ...timeFilter(req) };
-  if (req.query.sentiment) filter.sentiment = req.query.sentiment;
-  if (req.query.topic) {
+function buildFilter(q: Record<string, unknown>, datasetId: string): Record<string, unknown> {
+  const filter: Record<PropertyKey, unknown> = { datasetId, ...timeFilter(q) };
+  if (q.sentiment) filter.sentiment = q.sentiment;
+  if (q.topic) {
     // topics 为 JSON 数组列：JSON_CONTAINS 判断是否包含该主题（等价于原先 Mongo 数组包含语义）
     filter[Op.and] = sequelize.where(
-      sequelize.fn("JSON_CONTAINS", sequelize.col("topics"), sequelize.fn("JSON_QUOTE", String(req.query.topic))),
+      sequelize.fn("JSON_CONTAINS", sequelize.col("topics"), sequelize.fn("JSON_QUOTE", String(q.topic))),
       1
     );
   }
-  if (req.query.q) {
-    const q = String(req.query.q);
-    if (q.length > 200) return { __qTooLong: true } as unknown as Record<string, unknown>;
-    // 不区分大小写：utf8mb4_unicode_ci 排序规则下 LIKE 天然忽略大小写
-    filter.content = { [Op.like]: `%${escapeLike(q)}%` };
+  if (q.q) {
+    // 不区分大小写：utf8mb4_unicode_ci 排序规则下 LIKE 天然忽略大小写（长度上限由 zod 保证）
+    filter.content = { [Op.like]: `%${escapeLike(String(q.q))}%` };
   }
   return filter as Record<string, unknown>;
 }
 
 // 评论分页列表：GET /:datasetId/comments?page=&limit=&sentiment=&topic=&q=&from=&to=
-router.get("/:datasetId/comments", async (req, res) => {
-  try {
-    const rawPage = Number(req.query.page ?? 1);
-    const rawLimit = Number(req.query.limit ?? 20);
-    const page = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
-    const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 20;
-    const filter = buildFilter(req, req.params.datasetId);
-    if ((filter as { __qTooLong?: boolean }).__qTooLong) {
-      return res.status(400).json({ error: "搜索词过长（最多 200 字符）" });
-    }
+router.get(
+  "/:datasetId/comments",
+  validate({ params: datasetIdParamSchema, query: commentListQuerySchema }),
+  async (req, res) => {
+    const q = (req as ValidatedRequest).validatedQuery ?? {};
+    const page = q.page as number;
+    const limit = q.limit as number;
+    const filter = buildFilter(q, paramsOf(req, "datasetId"));
     const { count: total, rows } = await CommentModel.findAndCountAll({
       where: filter,
       order: [["timestamp", "DESC"]],
@@ -75,20 +81,20 @@ router.get("/:datasetId/comments", async (req, res) => {
         analyzed: c.analyzed,
       })),
     });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
-});
+);
 
 // 手动修正评论：PATCH /:datasetId/comments/:cid  { sentiment?, topics?, sentimentScore? }
-router.patch("/:datasetId/comments/:cid", async (req, res) => {
-  try {
-    const { sentiment, topics, sentimentScore } = req.body ?? {};
+router.patch(
+  "/:datasetId/comments/:cid",
+  validate({ params: commentParamSchema, body: patchCommentBodySchema }),
+  async (req, res) => {
+    const { sentiment, topics, sentimentScore } = req.body;
     const set: Record<string, unknown> = {};
-    if (sentiment && ["pos", "neu", "neg"].includes(sentiment as string)) {
-      set.sentiment = sentiment as Sentiment;
+    if (sentiment) {
+      set.sentiment = sentiment;
       const score =
-        typeof sentimentScore === "number" && Number.isFinite(sentimentScore)
+        typeof sentimentScore === "number"
           ? Math.max(-1, Math.min(1, sentimentScore))
           : sentiment === "pos" ? 0.8 : sentiment === "neg" ? -0.8 : 0;
       set.sentimentScore = Math.round(score * 100) / 100;
@@ -97,23 +103,21 @@ router.patch("/:datasetId/comments/:cid", async (req, res) => {
     if (Object.keys(set).length === 0) return res.status(400).json({ error: "没有可更新的字段" });
     set.analyzed = true;
     const [affected] = await CommentModel.update(set, {
-      where: { id: req.params.cid, datasetId: req.params.datasetId },
+      where: { id: paramsOf(req, "cid"), datasetId: paramsOf(req, "datasetId") },
     });
     if (affected === 0) return res.status(404).json({ error: "评论不存在" });
     res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
-});
+);
 
 // 导出评论：GET /:datasetId/export?format=csv|json&sentiment=&topic=&q=&from=&to=
-router.get("/:datasetId/export", async (req, res) => {
-  try {
-    const format = req.query.format === "csv" ? "csv" : "json";
-    const filter = buildFilter(req, req.params.datasetId);
-    if ((filter as { __qTooLong?: boolean }).__qTooLong) {
-      return res.status(400).json({ error: "搜索词过长（最多 200 字符）" });
-    }
+router.get(
+  "/:datasetId/export",
+  validate({ params: datasetIdParamSchema, query: exportQuerySchema }),
+  async (req, res) => {
+    const q = (req as ValidatedRequest).validatedQuery ?? {};
+    const format = q.format as "csv" | "json";
+    const filter = buildFilter(q, paramsOf(req, "datasetId"));
     const rows = await CommentModel.findAll({
       where: filter,
       order: [["timestamp", "DESC"]],
@@ -138,7 +142,7 @@ router.get("/:datasetId/export", async (req, res) => {
         );
       }
       res.setHeader("Content-Type", "text/csv;charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename=comments-${req.params.datasetId}.csv`);
+      res.setHeader("Content-Disposition", `attachment; filename=comments-${paramsOf(req, "datasetId")}.csv`);
       res.send("\uFEFF" + lines.join("\r\n"));
       return;
     }
@@ -154,17 +158,17 @@ router.get("/:datasetId/export", async (req, res) => {
         topics: c.topics,
       })),
     });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
-});
+);
 
 // 聚合统计：GET /:datasetId/stats?from=&to=（支持时间过滤，供时段对比）
-router.get("/:datasetId/stats", async (req, res) => {
-  const id = req.params.datasetId;
-  try {
-    if (!/^\d+$/.test(id)) return res.status(400).json({ error: "数据集 ID 不合法" });
-    const tf = timeFilter(req);
+router.get(
+  "/:datasetId/stats",
+  validate({ params: datasetIdParamSchema, query: statsQuerySchema }),
+  async (req, res) => {
+    const q = (req as ValidatedRequest).validatedQuery ?? {};
+    const id = paramsOf(req, "datasetId");
+    const tf = timeFilter(q);
     const where: Record<string, unknown> = { datasetId: id, ...tf };
     const [total, analyzed, rows] = await Promise.all([
       CommentModel.count({ where: { datasetId: id, ...tf } }),
@@ -199,8 +203,8 @@ router.get("/:datasetId/stats", async (req, res) => {
     const trend = [...trendMap.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 
     // 关键词云：从评论内容按评价词典统计词频（支持 ?dictionary= 自定义词，逗号分隔）
-    const customDict = req.query.dictionary
-      ? String(req.query.dictionary).split(",").map((s) => s.trim()).filter(Boolean)
+    const customDict = q.dictionary
+      ? String(q.dictionary).split(",").map((s) => s.trim()).filter(Boolean)
       : [];
     const contentRows = await CommentModel.findAll({
       where: { datasetId: id, ...tf },
@@ -219,9 +223,7 @@ router.get("/:datasetId/stats", async (req, res) => {
       keywords,
       trend,
     });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
-});
+);
 
 export default router;

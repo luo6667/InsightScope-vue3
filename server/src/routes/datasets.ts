@@ -5,168 +5,155 @@ import { startFeed, stopFeed } from "./feeds.js";
 import { cancelJobsForDataset } from "./analysis.js";
 import { normalizeComment, dedupKeyOf } from "../utils/commentUtils.js";
 import { assertPublicHttpUrl } from "../utils/urlSafety.js";
+import { validate, paramsOf, createDatasetBodySchema, idParamSchema } from "../validation.js";
 
 const router = Router();
 
 // 数据集列表（含统计）
 router.get("/", async (_req, res) => {
-  try {
-    const datasets = await DatasetModel.findAll({ order: [["createdAt", "DESC"]] });
-    const rows = await Promise.all(
-      datasets.map(async (d) => {
-        const [cnt, analyzed] = await Promise.all([
-          CommentModel.count({ where: { datasetId: d.id } }),
-          CommentModel.count({ where: { datasetId: d.id, analyzed: true } }),
-        ]);
-        return {
-          id: d.id,
-          name: d.name,
-          platform: d.platform,
-          type: d.type,
-          scenarioId: d.scenarioId,
-          feedUrl: d.feedUrl ?? "",
-          feedIntervalMin: d.feedIntervalMin ?? 0,
-          feedRunning: d.feedRunning ?? false,
-          feedLastAt: d.feedLastAt ?? null,
-          feedLastCount: d.feedLastCount ?? 0,
-          feedLastError: d.feedLastError ?? "",
-          commentCount: cnt,
-          analyzedCount: analyzed,
-          createdAt: d.createdAt,
-        };
-      })
-    );
-    res.json({ datasets: rows });
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
-  }
+  const datasets = await DatasetModel.findAll({ order: [["createdAt", "DESC"]] });
+  const rows = await Promise.all(
+    datasets.map(async (d) => {
+      const [cnt, analyzed] = await Promise.all([
+        CommentModel.count({ where: { datasetId: d.id } }),
+        CommentModel.count({ where: { datasetId: d.id, analyzed: true } }),
+      ]);
+      return {
+        id: d.id,
+        name: d.name,
+        platform: d.platform,
+        type: d.type,
+        scenarioId: d.scenarioId,
+        feedUrl: d.feedUrl ?? "",
+        feedIntervalMin: d.feedIntervalMin ?? 0,
+        feedRunning: d.feedRunning ?? false,
+        feedLastAt: d.feedLastAt ?? null,
+        feedLastCount: d.feedLastCount ?? 0,
+        feedLastError: d.feedLastError ?? "",
+        commentCount: cnt,
+        analyzedCount: analyzed,
+        createdAt: d.createdAt,
+      };
+    })
+  );
+  res.json({ datasets: rows });
 });
 
 // 数据集详情
-router.get("/:id", async (req, res) => {
-  try {
-    const d = await DatasetModel.findByPk(req.params.id);
-    if (!d) return res.status(404).json({ error: "数据集不存在" });
-    const [commentCount, analyzedCount] = await Promise.all([
-      CommentModel.count({ where: { datasetId: d.id } }),
-      CommentModel.count({ where: { datasetId: d.id, analyzed: true } }),
-    ]);
-    res.json({
-      id: d.id,
-      name: d.name,
-      platform: d.platform,
-      type: d.type,
-      scenarioId: d.scenarioId,
-      commentCount,
-      analyzedCount,
-      createdAt: d.createdAt,
-    });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
-  }
+router.get("/:id", validate({ params: idParamSchema }), async (req, res) => {
+  const d = await DatasetModel.findByPk(paramsOf(req, "id"));
+  if (!d) return res.status(404).json({ error: "数据集不存在" });
+  const [commentCount, analyzedCount] = await Promise.all([
+    CommentModel.count({ where: { datasetId: d.id } }),
+    CommentModel.count({ where: { datasetId: d.id, analyzed: true } }),
+  ]);
+  res.json({
+    id: d.id,
+    name: d.name,
+    platform: d.platform,
+    type: d.type,
+    scenarioId: d.scenarioId,
+    commentCount,
+    analyzedCount,
+    createdAt: d.createdAt,
+  });
 });
 
 // 创建数据集：{ name?, scenarioId } 内置场景 | { name?, platform?, comments } 导入 | { name?, feedUrl, feedIntervalMin } 定时抓取
-router.post("/", async (req, res) => {
-  const { name, scenarioId, platform, comments, feedUrl, feedIntervalMin } = req.body ?? {};
-  try {
-    if (scenarioId) {
-      const def = getScenario(scenarioId);
-      if (!def) return res.status(400).json({ error: "场景不存在" });
-      const dataset = await DatasetModel.create({
-        name: name?.trim() || def.name,
-        platform: platform || "混合来源",
-        type: "builtin",
-        scenarioId,
-      });
-      const generated = generateScenarioComments(def);
-      await CommentModel.bulkCreate(
-        generated.map((g) => ({
-          datasetId: dataset.id,
-          content: g.content,
-          author: g.author,
-          platform: g.platform,
-          timestamp: g.timestamp,
-          sentiment: g.sentiment,
-          sentimentScore: g.sentimentScore,
-          topics: g.topics,
-          keywords: g.keywords,
-          analyzed: true, // 内置场景已预标注，无 key 也能完整演示
-        }))
-      );
-      return res.status(201).json({ id: dataset.id, count: generated.length });
-    }
+router.post("/", validate({ body: createDatasetBodySchema }), async (req, res) => {
+  const { name, scenarioId, platform, comments, feedUrl, feedIntervalMin } = req.body;
 
-    if (Array.isArray(comments) && comments.length > 0) {
-      const dataset = await DatasetModel.create({
-        name: name?.trim() || `导入数据 ${new Date().toLocaleDateString("zh-CN")}`,
-        platform: platform || "导入来源",
-        type: "imported",
-      });
-      const now = Date.now();
-      // 去重规则（全项目统一）：同一作者发相同内容只留一条；不同作者发相同内容都保留
-      const seen = new Set<string>();
-      let i = 0;
-      const docs = comments
-        .filter((c) => {
-          const author = c.author ? String(c.author) : "匿名用户";
-          const key = dedupKeyOf(c as never, author);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .map((c) => {
-          const doc = normalizeComment(c as never, { platform: platform || "导入来源", now, index: i });
-          i++;
-          return { datasetId: dataset.id, ...doc };
-        });
-      await CommentModel.bulkCreate(docs);
-      return res.status(201).json({ id: dataset.id, count: docs.length, deduped: comments.length - docs.length });
-    }
-
-    // URL 定时抓取数据集
-    if (typeof feedUrl === "string" && feedUrl.trim()) {
-      // SSRF 防护：绝对 URL 必须为公网地址；相对路径（如 /api/demo/feed）仅指向后端自身
-      const trimmed = feedUrl.trim();
-      if (!trimmed.startsWith("/")) {
-        assertPublicHttpUrl(trimmed, "feedUrl");
-      }
-      const dataset = await DatasetModel.create({
-        name: name?.trim() || `定时抓取 ${new Date().toLocaleDateString("zh-CN")}`,
-        platform: platform || "数据源",
-        type: "feed",
-        feedUrl: trimmed,
-        feedIntervalMin: Math.max(1, Number(feedIntervalMin ?? 5)),
-        feedRunning: true,
-      });
-      await startFeed(dataset.id); // 立即抓一次 + 定时
-      return res.status(201).json({ id: dataset.id, count: 0, feed: true });
-    }
-
-    res.status(400).json({ error: "需要 scenarioId / comments 数组 / feedUrl" });
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  if (scenarioId) {
+    const def = getScenario(scenarioId);
+    if (!def) return res.status(400).json({ error: "场景不存在" });
+    const dataset = await DatasetModel.create({
+      name: name?.trim() || def.name,
+      platform: platform || "混合来源",
+      type: "builtin",
+      scenarioId,
+    });
+    const generated = generateScenarioComments(def);
+    await CommentModel.bulkCreate(
+      generated.map((g) => ({
+        datasetId: dataset.id,
+        content: g.content,
+        author: g.author,
+        platform: g.platform,
+        timestamp: g.timestamp,
+        sentiment: g.sentiment,
+        sentimentScore: g.sentimentScore,
+        topics: g.topics,
+        keywords: g.keywords,
+        analyzed: true, // 内置场景已预标注，无 key 也能完整演示
+      }))
+    );
+    return res.status(201).json({ id: dataset.id, count: generated.length });
   }
+
+  if (Array.isArray(comments) && comments.length > 0) {
+    const dataset = await DatasetModel.create({
+      name: name?.trim() || `导入数据 ${new Date().toLocaleDateString("zh-CN")}`,
+      platform: platform || "导入来源",
+      type: "imported",
+    });
+    const now = Date.now();
+    // 去重规则（全项目统一）：同一作者发相同内容只留一条；不同作者发相同内容都保留
+    const seen = new Set<string>();
+    let i = 0;
+    const docs = comments
+      .filter((c) => {
+        const author = c.author ? String(c.author) : "匿名用户";
+        const key = dedupKeyOf(c as never, author);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((c) => {
+        const doc = normalizeComment(c as never, { platform: platform || "导入来源", now, index: i });
+        i++;
+        return { datasetId: dataset.id, ...doc };
+      });
+    await CommentModel.bulkCreate(docs);
+    return res.status(201).json({ id: dataset.id, count: docs.length, deduped: comments.length - docs.length });
+  }
+
+  // URL 定时抓取数据集
+  if (typeof feedUrl === "string" && feedUrl.trim()) {
+    // SSRF 防护：绝对 URL 必须为公网地址；相对路径（如 /api/demo/feed）仅指向后端自身
+    const trimmed = feedUrl.trim();
+    if (!trimmed.startsWith("/")) {
+      assertPublicHttpUrl(trimmed, "feedUrl");
+    }
+    const dataset = await DatasetModel.create({
+      name: name?.trim() || `定时抓取 ${new Date().toLocaleDateString("zh-CN")}`,
+      platform: platform || "数据源",
+      type: "feed",
+      feedUrl: trimmed,
+      // schema 已保证为 1-1440 的整数（修复：此前 NaN 会入库、超大值会撑爆 setInterval）
+      feedIntervalMin: feedIntervalMin ?? 5,
+      feedRunning: true,
+    });
+    await startFeed(dataset.id); // 立即抓一次 + 定时
+    return res.status(201).json({ id: dataset.id, count: 0, feed: true });
+  }
+
+  res.status(400).json({ error: "需要 scenarioId / comments 数组 / feedUrl" });
 });
 
 // 删除数据集（级联清理）
-router.delete("/:id", async (req, res) => {
-  try {
-    const d = await DatasetModel.findByPk(req.params.id);
-    if (!d) return res.status(404).json({ error: "数据集不存在" });
-    stopFeed(d.id);
-    await cancelJobsForDataset(d.id); // 取消运行中的分析任务，防止旧 worker 继续写已删除数据
-    await Promise.all([
-      CommentModel.destroy({ where: { datasetId: d.id } }),
-      AnalysisJobModel.destroy({ where: { datasetId: d.id } }),
-      AlertModel.destroy({ where: { datasetId: d.id } }),
-      AlertRuleModel.destroy({ where: { datasetId: d.id } }),
-      DatasetModel.destroy({ where: { id: d.id } }),
-    ]);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
-  }
+router.delete("/:id", validate({ params: idParamSchema }), async (req, res) => {
+  const d = await DatasetModel.findByPk(paramsOf(req, "id"));
+  if (!d) return res.status(404).json({ error: "数据集不存在" });
+  stopFeed(d.id);
+  await cancelJobsForDataset(d.id); // 取消运行中的分析任务，防止旧 worker 继续写已删除数据
+  await Promise.all([
+    CommentModel.destroy({ where: { datasetId: d.id } }),
+    AnalysisJobModel.destroy({ where: { datasetId: d.id } }),
+    AlertModel.destroy({ where: { datasetId: d.id } }),
+    AlertRuleModel.destroy({ where: { datasetId: d.id } }),
+    DatasetModel.destroy({ where: { id: d.id } }),
+  ]);
+  res.json({ ok: true });
 });
 
 export default router;

@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import { AlertModel, AlertRuleModel, CommentModel } from "../models.js";
 import { io } from "../index.js";
 import { detectAnomaly } from "../services/anomalyService.js";
+import { validate, paramsOf, datasetIdParamSchema, speedBodySchema } from "../validation.js";
 
 const router = Router();
 
@@ -177,34 +178,40 @@ export function stopSim(datasetId: string) {
 }
 
 // 开始模拟：POST /:datasetId/simulate/start { speed }
-router.post("/:datasetId/simulate/start", async (req, res) => {
-  const datasetId = req.params.datasetId;
-  const rawSpeed = Number(req.body?.speed ?? 5);
-  const speed = Number.isFinite(rawSpeed) ? Math.max(1, Math.min(20, rawSpeed)) : 5;
-  const count = await CommentModel.count({ where: { datasetId } });
-  if (!count) return res.status(400).json({ error: "数据集没有评论" });
-  stopSim(datasetId);
-  sims.set(datasetId, { timer: null, index: 0, speed });
-  emit(datasetId, "sim:status", { running: true, speed, total: count });
-  void tick(datasetId).catch((e) => {
-    console.error("[simulate] start tick failed", e instanceof Error ? e.message : e);
-  });
-  res.json({ ok: true, total: count, speed });
-});
+router.post(
+  "/:datasetId/simulate/start",
+  validate({ params: datasetIdParamSchema, body: speedBodySchema }),
+  async (req, res) => {
+    const datasetId = paramsOf(req, "datasetId");
+    const speed = req.body.speed; // schema 已 clamp 1-20，默认 5
+    const count = await CommentModel.count({ where: { datasetId } });
+    if (!count) return res.status(400).json({ error: "数据集没有评论" });
+    stopSim(datasetId);
+    sims.set(datasetId, { timer: null, index: 0, speed });
+    emit(datasetId, "sim:status", { running: true, speed, total: count });
+    void tick(datasetId).catch((e) => {
+      console.error("[simulate] start tick failed", e instanceof Error ? e.message : e);
+    });
+    res.json({ ok: true, total: count, speed });
+  }
+);
 
 // 停止模拟：POST /:datasetId/simulate/stop
-router.post("/:datasetId/simulate/stop", (req, res) => {
-  stopSim(req.params.datasetId);
+router.post("/:datasetId/simulate/stop", validate({ params: datasetIdParamSchema }), (req, res) => {
+  stopSim(paramsOf(req, "datasetId"));
   res.json({ ok: true });
 });
 
 // 播放中调整倍速：POST /:datasetId/simulate/speed { speed }
-router.post("/:datasetId/simulate/speed", (req, res) => {
-  const sim = sims.get(req.params.datasetId);
-  if (!sim) return res.status(404).json({ error: "模拟未在运行" });
-  const rawSpeed = Number(req.body?.speed ?? 5);
-  sim.speed = Number.isFinite(rawSpeed) ? Math.max(1, Math.min(20, rawSpeed)) : 5;
-  res.json({ ok: true, speed: sim.speed });
-});
+router.post(
+  "/:datasetId/simulate/speed",
+  validate({ params: datasetIdParamSchema, body: speedBodySchema }),
+  (req, res) => {
+    const sim = sims.get(paramsOf(req, "datasetId"));
+    if (!sim) return res.status(404).json({ error: "模拟未在运行" });
+    sim.speed = req.body.speed;
+    res.json({ ok: true, speed: sim.speed });
+  }
+);
 
 export default router;

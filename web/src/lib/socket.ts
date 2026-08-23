@@ -1,4 +1,5 @@
 import { io, type Socket } from "socket.io-client";
+
 import { getAccessToken, notifyUnauthorized } from "./auth";
 
 let socket: Socket | null = null;

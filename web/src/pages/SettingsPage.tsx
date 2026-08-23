@@ -1,8 +1,9 @@
-﻿import { useState } from "react";
-import { BookMarked, Check, KeyRound, ShieldCheck } from "lucide-react";
-import { useSettings } from "../store/settings";
-import { getCustomDict, setCustomDict } from "../lib/customDict";
+﻿import { BookMarked, Check, KeyRound, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+
 import { Button, Card, CardHeader, Field, Input, PageHeader, Textarea } from "../components/ui";
+import { getCustomDict, setCustomDict } from "../lib/customDict";
+import { useSettings } from "../store/settings";
 
 export default function SettingsPage() {
   const s = useSettings();

@@ -3,6 +3,7 @@ import { CommentModel, DatasetModel } from "../models.js";
 import { io } from "../index.js";
 import { normalizeComment, buildDedupFilter } from "../utils/commentUtils.js";
 import { assertPublicHttpUrl } from "../utils/urlSafety.js";
+import { validate, paramsOf, datasetIdParamSchema } from "../validation.js";
 
 const router = Router();
 
@@ -101,7 +102,7 @@ export async function startFeed(datasetId: string) {
   stopFeed(datasetId);
   const ds = await DatasetModel.findByPk(datasetId);
   if (!ds || !ds.feedUrl) return;
-  const intervalMs = Math.max(1, ds.feedIntervalMin || 5) * 60 * 1000;
+  const intervalMs = Math.min(1440, Math.max(1, ds.feedIntervalMin || 5)) * 60 * 1000; // 防御旧数据超限导致 setInterval 溢出
   await DatasetModel.update({ feedRunning: true }, { where: { id: datasetId } });
   emit(String(datasetId), "feed:status", { running: true });
   const run = async () => {
@@ -127,8 +128,8 @@ export function stopFeed(datasetId: string) {
 // 这里提供启动/停止/状态
 
 // 启动：POST /:id/feed/start
-router.post("/:datasetId/feed/start", async (req, res) => {
-  const ds = await DatasetModel.findByPk(req.params.datasetId);
+router.post("/:datasetId/feed/start", validate({ params: datasetIdParamSchema }), async (req, res) => {
+  const ds = await DatasetModel.findByPk(paramsOf(req, "datasetId"));
   if (!ds) return res.status(404).json({ error: "数据集不存在" });
   if (!ds.feedUrl) return res.status(400).json({ error: "该数据集未配置数据源 URL" });
   await startFeed(ds.id);
@@ -136,19 +137,15 @@ router.post("/:datasetId/feed/start", async (req, res) => {
 });
 
 // 停止：POST /:id/feed/stop
-router.post("/:datasetId/feed/stop", (req, res) => {
-  stopFeed(req.params.datasetId);
+router.post("/:datasetId/feed/stop", validate({ params: datasetIdParamSchema }), (req, res) => {
+  stopFeed(paramsOf(req, "datasetId"));
   res.json({ ok: true });
 });
 
 // 立即抓取一次：POST /:id/feed/pull
-router.post("/:datasetId/feed/pull", async (req, res) => {
-  try {
-    const count = await fetchFeed(req.params.datasetId);
-    res.json({ ok: true, count });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
-  }
+router.post("/:datasetId/feed/pull", validate({ params: datasetIdParamSchema }), async (req, res) => {
+  const count = await fetchFeed(paramsOf(req, "datasetId"));
+  res.json({ ok: true, count });
 });
 
 // 本地演示数据源：GET /api/demo/feed（每次返回不同评论，便于演示持续抓取 + 去重）

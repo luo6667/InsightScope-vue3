@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
 import { Check, Pencil, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+
 import { updateComment } from "../api/api";
-import { Badge, Button, Input } from "./ui";
 import type { CommentRow } from "../api/types";
+import { Badge, Button, Input } from "./ui";
 
 interface Props {
   datasetId: string;

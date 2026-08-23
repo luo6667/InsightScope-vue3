@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
+import { ZodError } from "zod";
 import { createServer } from "node:http";
 import path from "node:path";
 import { Server } from "socket.io";
@@ -57,6 +60,23 @@ process.on("uncaughtException", (err) => {
 });
 
 const app = express();
+// 安全响应头（CSP 需允许 inline style：React style 属性依赖；script 仅同源产物）
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "data:"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  })
+);
 app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json({ limit: "10mb" }));
 
@@ -84,23 +104,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// 写接口限流（简单内存滑动窗口：IP -> 时间戳数组）
-const rateBuckets = new Map<string, number[]>();
-app.use((req, res, next) => {
-  if (RATE_LIMIT_PER_MIN <= 0) return next();
-  if (!["POST", "PATCH", "PUT", "DELETE"].includes(req.method)) return next();
-  if (!req.path.startsWith("/api")) return next();
-  const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
-  const now = Date.now();
-  const window = 60_000;
-  const arr = (rateBuckets.get(ip) ?? []).filter((t) => now - t < window);
-  if (arr.length >= RATE_LIMIT_PER_MIN) {
-    return res.status(429).json({ error: "请求过于频繁，请稍后再试" });
-  }
-  arr.push(now);
-  rateBuckets.set(ip, arr);
-  next();
+// 写接口限流（express-rate-limit：滑动窗口 + 定期清理，替代手写 Map——原实现 key 只增不减有内存泄漏）
+const writeLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: RATE_LIMIT_PER_MIN, // 0 = 关闭（由 skip 全放行）
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "请求过于频繁，请稍后再试" },
+  skip: (req) =>
+    RATE_LIMIT_PER_MIN <= 0 ||
+    !["POST", "PATCH", "PUT", "DELETE"].includes(req.method) ||
+    !req.path.startsWith("/api"),
 });
+app.use(writeLimiter);
 
 const httpServer = createServer(app);
 
@@ -183,8 +199,11 @@ app.get("/{*splat}", (req, res, next) => {
   });
 });
 
-// 统一错误处理：HttpError 带状态码；其余 500（生产不泄露内部错误细节）
+// 统一错误处理：HttpError 带状态码；ZodError 防御兜底；其余 500（生产不泄露内部错误细节）
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err instanceof ZodError) {
+    return res.status(400).json({ error: err.issues[0]?.message ?? "参数校验失败" });
+  }
   const status =
     err instanceof HttpError ? err.status : (err as { status?: number }).status ?? 500;
   if (status >= 500) console.error("[error]", err);

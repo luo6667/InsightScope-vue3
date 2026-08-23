@@ -1,3 +1,4 @@
+import "dotenv/config"; // 加载 server/.env（不覆盖已存在的环境变量）；.env.example 见仓库
 import { fileURLToPath } from "node:url";
 
 /**

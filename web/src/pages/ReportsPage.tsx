@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
 import { Clock, FileDown, FileText, Loader2, Trash2, Wand2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+import type { DatasetStats } from "../api/types";
+import { Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
 import { useDatasets, useDatasetStats } from "../hooks/useData";
-import { useSettings } from "../store/settings";
 import { streamChat } from "../lib/ai";
-import { Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
-import type { DatasetStats } from "../api/types";
+import { useSettings } from "../store/settings";
 
 const REPORT_SYSTEM = `你是舆情分析专家。基于用户提供的评论统计数据，用中文 Markdown 输出一份「舆情周报」，结构：
 # 舆情周报

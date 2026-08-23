@@ -1,9 +1,10 @@
-﻿import { AnimatePresence, motion } from "motion/react";
+﻿import { Bell, BrainCircuit, Database, FileText, Gauge, Loader2, Moon, Radar, Settings, Sun, Upload } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense } from "react";
-import { Bell, BrainCircuit, Database, FileText, Gauge, Loader2, Moon, Radar, Settings, Sun, Upload } from "lucide-react";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { useTheme } from "./hooks/useTheme";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+
 import AccessGate from "./components/AccessGate";
+import { useTheme } from "./hooks/useTheme";
 
 // 路由级懒加载：按需加载页面，减小首屏 bundle
 const DatasetsPage = lazy(() => import("./pages/DatasetsPage"));

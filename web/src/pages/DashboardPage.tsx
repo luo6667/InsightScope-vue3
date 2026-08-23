@@ -1,17 +1,18 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "motion/react";
-import { Activity, Bell, Gauge, Info, MessageSquareText, Pause, Play, Radar, Scale, Tags, X } from "lucide-react";
+﻿import { useQueryClient } from "@tanstack/react-query";
 import type { EChartsOption } from "echarts";
+import { Activity, Bell, Gauge, Info, MessageSquareText, Pause, Play, Radar, Scale, Tags, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useMemo, useState } from "react";
+
 import { setSimSpeed, startSimulate, stopSimulate } from "../api/api";
+import type { Alert, CommentRow, DatasetStats } from "../api/types";
+import CommentModal from "../components/CommentModal";
+import EChart from "../components/EChart";
+import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Select, Skeleton, StatCard } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
-import { useDatasets, useDatasetStats, useComments } from "../hooks/useData";
+import { useComments,useDatasets, useDatasetStats } from "../hooks/useData";
 import { useDatasetSocket } from "../hooks/useDatasetSocket";
 import { customDictKey } from "../lib/customDict";
-import EChart from "../components/EChart";
-import CommentModal from "../components/CommentModal";
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Skeleton, Select, StatCard } from "../components/ui";
-import type { Alert, CommentRow, DatasetStats } from "../api/types";
 
 const SENTIMENT = {
   pos: { label: "正面", color: "#34d399", dot: "bg-emerald-400" },
@@ -82,7 +83,7 @@ export default function DashboardPage() {
       if (!datasetId) return;
       void stopSimulate(datasetId).catch(() => {});
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [datasetId]);
 
   // socket 订阅：实时评论 / 告警（含浏览器通知）/ 模拟状态
