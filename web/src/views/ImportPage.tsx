@@ -2,11 +2,12 @@
 import { ArrowRight, ClipboardPaste, Clock, FileDown, FileSpreadsheet, FileUp, MessagesSquare, Radio, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { createFeedDataset, createScenarioDataset, importComments, listScenarios } from "../api/api";
 import type { ScenarioInfo } from "../api/types";
 import { Button, Card, Field, Input, PageHeader, Textarea } from "../components/ui";
+import { useImportForm } from "../hooks/useImportForm";
+import { type CsvRow,downloadCsvTemplate, parseCsv } from "../lib/csv";
 import { csvImportSchema, feedImportSchema, firstError, pasteImportSchema } from "../lib/validation";
 
 export default function ImportPage() {
@@ -116,8 +117,7 @@ function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone
 function PasteImport({ onCreate, onDone }: { onCreate: (name: string, c: unknown[]) => Promise<{ id: string; count: number }>; onDone: (id: string) => void }) {
   const [text, setText] = useState("");
   const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const form = useImportForm();
 
   const submit = async () => {
     const parsed = pasteImportSchema.safeParse({
@@ -125,21 +125,15 @@ function PasteImport({ onCreate, onDone }: { onCreate: (name: string, c: unknown
       comments: text.split("\n").map((l) => l.trim()).filter(Boolean),
     });
     if (!parsed.success) {
-      setError(firstError(parsed.error));
+      form.fail(firstError(parsed.error));
       return;
     }
     const { name: n, comments } = parsed.data;
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await onCreate(n ?? "", comments.map((content) => ({ content, analyzed: false })));
-      toast.success(`导入成功，共 ${r.count} 条评论`);
-      onDone(r.id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
+    await form.run(
+      () => onCreate(n ?? "", comments.map((content) => ({ content, analyzed: false }))),
+      (r) => `导入成功，共 ${r.count} 条评论`,
+      onDone
+    );
   };
 
   return (
@@ -162,100 +156,33 @@ function PasteImport({ onCreate, onDone }: { onCreate: (name: string, c: unknown
           />
         </Field>
       </div>
-      {error && <div className="mt-2 text-xs text-red-400">{error}</div>}
+      {form.error && <div className="mt-2 text-xs text-red-400">{form.error}</div>}
       <div className="mt-4">
-        <Button variant="primary" onClick={() => void submit()} disabled={loading || !text.trim()}>
+        <Button variant="primary" onClick={() => void submit()} disabled={form.loading || !text.trim()}>
           <FileUp size={15} />
-          {loading ? "导入中…" : "导入评论"}
+          {form.loading ? "导入中…" : "导入评论"}
         </Button>
       </div>
     </Card>
   );
 }
 
-interface CsvRow {
-  content: string;
-  author?: string;
-  platform?: string;
-  sentiment?: string;
-}
-
-/** 解析单行 CSV：支持双引号包裹字段、引号内逗号、转义引号 "" */
-function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQ) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQ = false;
-        }
-      } else {
-        cur += ch;
-      }
-    } else if (ch === '"') {
-      inQ = true;
-    } else if (ch === ",") {
-      out.push(cur);
-      cur = "";
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out.map((s) => s.trim());
-}
-
-/** 简单 CSV 解析：首行表头，支持中文/英文列名，引号包裹字段 */
-function parseCsv(text: string): CsvRow[] {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) return [];
-  const header = splitCsvLine(lines[0]).map((h) => h.replace(/^"|"$/g, ""));
-  const findCol = (names: string[]) => {
-    const idx = header.findIndex((h) => names.includes(h.toLowerCase()));
-    return idx >= 0 ? idx : -1;
-  };
-  const colContent = Math.max(0, findCol(["content", "评论", "内容", "text"]));
-  const colAuthor = findCol(["author", "作者", "用户", "昵称"]);
-  const colPlatform = findCol(["platform", "平台", "来源"]);
-  const colSentiment = findCol(["sentiment", "情感", "情绪"]);
-
-  const rows: CsvRow[] = [];
-  for (const line of lines.slice(1)) {
-    const cells = splitCsvLine(line);
-    const content = cells[colContent] ?? "";
-    if (!content) continue;
-    const row: CsvRow = { content };
-    if (colAuthor >= 0) row.author = cells[colAuthor];
-    if (colPlatform >= 0) row.platform = cells[colPlatform];
-    if (colSentiment >= 0) row.sentiment = cells[colSentiment];
-    rows.push(row);
-  }
-  return rows;
-}
-
 function CsvImport({ onCreate, onDone }: { onCreate: (c: unknown[]) => Promise<{ id: string; count: number }>; onDone: (id: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<CsvRow[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const form = useImportForm();
 
   const onFile = (file: File | undefined) => {
     if (!file) return;
     setFileName(file.name);
-    setError(null);
+    form.fail(null);
     const reader = new FileReader();
     reader.onload = () => {
       const parsed = parseCsv(String(reader.result ?? ""));
       if (parsed.length === 0) {
         setRows(null);
-        setError("未能解析出评论，请确认 CSV 首行包含列名（content / 评论 / 内容）");
+        form.fail("未能解析出评论，请确认 CSV 首行包含列名（content / 评论 / 内容）");
         return;
       }
       setRows(parsed);
@@ -267,28 +194,23 @@ function CsvImport({ onCreate, onDone }: { onCreate: (c: unknown[]) => Promise<{
     if (!rows || rows.length === 0) return;
     const parsed = csvImportSchema.safeParse({ rows });
     if (!parsed.success) {
-      setError(firstError(parsed.error));
+      form.fail(firstError(parsed.error));
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await onCreate(
-        parsed.data.rows.map((row) => ({
-          content: row.content,
-          author: row.author,
-          platform: row.platform,
-          sentiment: row.sentiment,
-          analyzed: false,
-        }))
-      );
-      toast.success(`CSV 导入成功，共 ${r.count} 条评论`);
-      onDone(r.id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
+    await form.run(
+      () =>
+        onCreate(
+          parsed.data.rows.map((row) => ({
+            content: row.content,
+            author: row.author,
+            platform: row.platform,
+            sentiment: row.sentiment,
+            analyzed: false,
+          }))
+        ),
+      (r) => `CSV 导入成功，共 ${r.count} 条评论`,
+      onDone
+    );
   };
 
   return (
@@ -315,14 +237,14 @@ function CsvImport({ onCreate, onDone }: { onCreate: (c: unknown[]) => Promise<{
             <span className="text-xs text-ink-400">
               解析出 <span className="tabular-nums text-ink-200">{rows.length}</span> 条评论
             </span>
-            <Button variant="primary" size="sm" onClick={() => void submit()} disabled={loading}>
+            <Button variant="primary" size="sm" onClick={() => void submit()} disabled={form.loading}>
               <FileUp size={13} />
-              {loading ? "导入中…" : "导入"}
+              {form.loading ? "导入中…" : "导入"}
             </Button>
           </>
         )}
       </div>
-      {error && <div className="mt-2 text-xs text-red-400">{error}</div>}
+      {form.error && <div className="mt-2 text-xs text-red-400">{form.error}</div>}
       {rows && rows.length > 0 && (
         <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950 p-3">
           <div className="mb-2 text-xs text-ink-400">预览（前 3 条）</div>
@@ -339,23 +261,6 @@ function CsvImport({ onCreate, onDone }: { onCreate: (c: unknown[]) => Promise<{
   );
 }
 
-/** 下载 CSV 模板（带 UTF-8 BOM，Excel 打开不乱码） */
-function downloadCsvTemplate() {
-  const csv = [
-    "评论,作者,平台,情感",
-    "快递太慢了，等了三天才到,小明,淘宝,neg",
-    "客服态度很好，问题解决很快,小红,京东,pos",
-    "手机用起来很流畅，性能不错,阿伟,天猫,pos",
-  ].join("\r\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "评论导入模板.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function FeedImport({
   onCreate,
   onDone,
@@ -366,27 +271,20 @@ function FeedImport({
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [interval, setInterval] = useState(5);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const form = useImportForm();
 
   const submit = async () => {
     const parsed = feedImportSchema.safeParse({ name, url, intervalMin: interval });
     if (!parsed.success) {
-      setError(firstError(parsed.error));
+      form.fail(firstError(parsed.error));
       return;
     }
     const { name: n, url: u, intervalMin } = parsed.data;
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await onCreate(n ?? "定时抓取数据源", u, intervalMin);
-      toast.success(r.count > 0 ? `抓取导入成功，共 ${r.count} 条评论` : "数据集已创建，将按设定间隔自动抓取");
-      onDone(r.id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
+    await form.run(
+      () => onCreate(n ?? "定时抓取数据源", u, intervalMin),
+      (r) => (r.count > 0 ? `抓取导入成功，共 ${r.count} 条评论` : "数据集已创建，将按设定间隔自动抓取"),
+      onDone
+    );
   };
 
   return (
@@ -419,11 +317,11 @@ function FeedImport({
         </Button>
         <span className="text-ink-400">先演示用「本地演示数据源」，无需联网</span>
       </div>
-      {error && <div className="mt-2 text-xs text-red-400">{error}</div>}
+      {form.error && <div className="mt-2 text-xs text-red-400">{form.error}</div>}
       <div className="mt-4">
-        <Button variant="primary" onClick={() => void submit()} disabled={loading || !url.trim()}>
+        <Button variant="primary" onClick={() => void submit()} disabled={form.loading || !url.trim()}>
           <Radio size={15} />
-          {loading ? "创建中…" : "创建并开始定时抓取"}
+          {form.loading ? "创建中…" : "创建并开始定时抓取"}
         </Button>
       </div>
     </Card>

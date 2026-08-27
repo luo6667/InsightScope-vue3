@@ -1,3 +1,5 @@
+'use client';
+
 import type { EChartsOption } from "echarts";
 import { useEffect, useRef } from "react";
 

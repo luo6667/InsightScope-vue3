@@ -3,10 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { DatasetStats } from "../api/types";
-import { Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
+import DatasetPicker from "../components/DatasetPicker";
+import { Button, Card, CardHeader, EmptyState, PageHeader } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
 import { useDatasets, useDatasetStats } from "../hooks/useData";
 import { streamChat } from "../lib/ai";
+import { errMsg } from "../lib/errors";
+import { formatTime } from "../lib/format";
 import { useSettings } from "../store/settings";
 
 const REPORT_SYSTEM = `你是舆情分析专家。基于用户提供的评论统计数据，用中文 Markdown 输出一份「舆情周报」，结构：
@@ -113,7 +116,7 @@ export default function ReportsPage() {
       );
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       // 只有最新一次生成才复位按钮状态
       if (genIdRef.current === genId) setGenerating(false);
@@ -129,7 +132,7 @@ export default function ReportsPage() {
       id: `${Date.now()}`,
       datasetId,
       datasetName,
-      createdAt: new Date().toLocaleString("zh-CN"),
+      createdAt: formatTime(Date.now()),
       content: report,
     };
     const next = [item, ...loadHistory()].slice(0, 100);
@@ -161,14 +164,15 @@ export default function ReportsPage() {
         title="舆情报告"
         desc="AI 基于统计数据自动生成舆情周报（流式输出，自动保存历史）"
         extra={
-          <Select value={datasetId} onChange={(e) => { setDatasetId(e.target.value); setReport(""); }} className="w-56">
-            <option value="">选择数据集…</option>
-            {datasets?.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </Select>
+          <DatasetPicker
+            datasets={datasets}
+            datasetId={datasetId}
+            onChange={(id) => {
+              setDatasetId(id);
+              setReport("");
+            }}
+            showCount={false}
+          />
         }
       />
 

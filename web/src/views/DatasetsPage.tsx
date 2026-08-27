@@ -7,10 +7,9 @@ import { toast } from "sonner";
 import { deleteDataset, exportComments, pullFeedNow, startFeedPull, stopFeedPull } from "../api/api";
 import { Badge, Button, Card, CardSkeleton, EmptyState, PageHeader } from "../components/ui";
 import { useDatasets } from "../hooks/useData";
+import { errMsg } from "../lib/errors";
 
 const typeLabel: Record<string, string> = { builtin: "内置场景", imported: "导入数据", feed: "定时抓取" };
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function DatasetsPage() {
   const qc = useQueryClient();

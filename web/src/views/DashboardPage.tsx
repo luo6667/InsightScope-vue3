@@ -1,20 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, Bell, Gauge, Info, MessageSquareText, Pause, Play, Radar, Scale, Tags, X } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { setSimSpeed, startSimulate, stopSimulate } from "../api/api";
 import type { Alert, CommentRow } from "../api/types";
 import CommentModal from "../components/CommentModal";
-import NotAnalyzed from "../components/dashboard/NotAnalyzed";
-import { compareDonut, donutOption, pct, SENTIMENT, topicOption, trendOption, wordcloudOption } from "../components/dashboard/options";
-import RangeField from "../components/dashboard/RangeField";
-import EChart from "../components/EChart";
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Select, Skeleton, StatCard } from "../components/ui";
+import ChartGrid from "../components/dashboard/ChartGrid";
+import LiveMonitor from "../components/dashboard/LiveMonitor";
+import { donutOption, topicOption, trendOption, wordcloudOption } from "../components/dashboard/options";
+import OverviewStats from "../components/dashboard/OverviewStats";
+import RecentComments from "../components/dashboard/RecentComments";
+import DatasetPicker from "../components/DatasetPicker";
+import { EmptyState, PageHeader } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
-import { useComments,useDatasets, useDatasetStats } from "../hooks/useData";
+import { useComments, useDatasets, useDatasetStats } from "../hooks/useData";
 import { useDatasetSocket } from "../hooks/useDatasetSocket";
 import { customDictKey } from "../lib/customDict";
+import { errMsg } from "../lib/errors";
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -22,6 +24,11 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * 舆情监控台：概览统计 / 实时监控 / 四图图表区 / 最近评论。
+ * 状态与 socket 订阅集中在父组件,渲染拆分为 OverviewStats / LiveMonitor /
+ * ChartGrid / RecentComments(见 components/dashboard/)。
+ */
 export default function DashboardPage() {
   const qc = useQueryClient();
   const { datasetId, setDatasetId } = useCurrentDataset();
@@ -79,7 +86,6 @@ export default function DashboardPage() {
       if (!datasetId) return;
       void stopSimulate(datasetId).catch(() => {});
     };
-     
   }, [datasetId]);
 
   // socket 订阅：实时评论 / 告警（含浏览器通知）/ 模拟状态
@@ -127,7 +133,7 @@ export default function DashboardPage() {
         setSpeed(r.speed);
       }
     } catch (e) {
-      setSimError(e instanceof Error ? e.message : String(e));
+      setSimError(errMsg(e));
     }
   };
 
@@ -149,16 +155,7 @@ export default function DashboardPage() {
       <PageHeader
         title="舆情监控台"
         desc="情感、主题与实时舆情走势一览"
-        extra={
-          <Select value={datasetId} onChange={(e) => setDatasetId(e.target.value)} className="w-56">
-            <option value="">选择数据集…</option>
-            {datasets?.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}（{d.commentCount} 条）
-              </option>
-            ))}
-          </Select>
-        }
+        extra={<DatasetPicker datasets={datasets} datasetId={datasetId} onChange={setDatasetId} />}
       />
 
       {!datasetId && (
@@ -173,278 +170,37 @@ export default function DashboardPage() {
 
       {datasetId && current && (
         <>
-          {/* 概览 */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {stats ? (
-              <>
-                <StatCard label="评论总数" value={stats.total} sub={current.platform} />
-                <StatCard
-                  label="已分析"
-                  value={stats.analyzed}
-                  sub={`${stats.total ? Math.round((stats.analyzed / stats.total) * 100) : 0}% 覆盖率`}
-                />
-                <StatCard label="正面占比" value={`${pct(stats, "pos")}`} sub={`${stats.sentiment.pos} 条`} accentCls="text-emerald-400" />
-                <StatCard label="负面占比" value={`${pct(stats, "neg")}`} sub={`${stats.sentiment.neg} 条`} accentCls="text-red-400" />
-              </>
-            ) : (
-              Array.from({ length: 4 }).map((_, i) => <Card key={i} className="p-4"><Skeleton className="h-3 w-1/2" /><Skeleton className="mt-2 h-7 w-2/3" /></Card>)
-            )}
-          </div>
-
-          {/* 实时监控 */}
-          <Card className="mt-4">
-            <CardHeader icon={<Activity size={15} />} title="实时监控" />
-            <div className="p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={speed} onChange={(e) => void changeSpeed(Number(e.target.value))} className="h-8 w-28 text-xs">
-                  <option value={1}>1x 慢速</option>
-                  <option value={5}>5x 正常</option>
-                  <option value={10}>10x 加速</option>
-                  <option value={20}>20x 极速</option>
-                </Select>
-                <Button variant={simRunning ? "danger" : "primary"} size="sm" onClick={() => void toggleSim()}>
-                  {simRunning ? <Pause size={13} /> : <Play size={13} />}
-                  {simRunning ? "停止" : "播放"}
-                </Button>
-                <span className="flex items-center gap-1.5 text-[13px] text-ink-400">
-                  {simRunning ? (
-                    <>
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
-                      评论实时流入中
-                    </>
-                  ) : (
-                    <>
-                      <span className="h-1.5 w-1.5 rounded-full bg-ink-500" />
-                      待机，点击播放开始
-                    </>
-                  )}
-                </span>
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <div className="rounded-lg border border-ink-800 bg-ink-950 px-3 py-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-ink-400">已流入</div>
-                  <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink-100">{inflow}</div>
-                </div>
-                <div className="rounded-lg border border-ink-800 bg-ink-950 px-3 py-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-ink-400">窗口负面率</div>
-                  <div className={`mt-0.5 text-lg font-semibold tabular-nums ${windowNegRate > 40 ? "text-red-400" : windowNegRate > 20 ? "text-amber-400" : "text-emerald-400"}`}>
-                    {windowNegRate}%
-                  </div>
-                </div>
-                <div className="rounded-lg border border-ink-800 bg-ink-950 px-3 py-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-ink-400">告警</div>
-                  <div className={`mt-0.5 text-lg font-semibold tabular-nums ${alerts.length > 0 ? "text-red-400" : "text-ink-100"}`}>
-                    {alerts.length}
-                  </div>
-                </div>
-              </div>
-
-              {simError && <div className="mb-3 mt-3 text-xs text-red-400">{simError}</div>}
-
-              <AnimatePresence>
-                {alerts.map((a) => (
-                  <motion.div
-                    key={a.id}
-                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className={`mb-2 flex items-start gap-2.5 overflow-hidden rounded-lg border px-3.5 py-2.5 ${
-                      a.severity === "critical"
-                        ? "border-red-800/60 bg-red-950/40"
-                        : "border-amber-800/50 bg-amber-950/30"
-                    }`}
-                  >
-                    <Bell size={15} className={`mt-0.5 shrink-0 ${a.severity === "critical" ? "text-red-400" : "text-amber-400"}`} />
-                    <span className={`flex-1 text-[13px] leading-snug ${a.severity === "critical" ? "text-red-200" : "text-amber-200"}`}>
-                      {a.message}
-                    </span>
-                    <button
-                      onClick={() => setAlerts((prev) => prev.filter((x) => x.id !== a.id))}
-                      className="shrink-0 text-ink-400 transition-colors hover:text-ink-200"
-                    >
-                      <X size={14} />
-                    </button>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              <div className="mt-3 h-56 overflow-hidden">
-                {liveComments.length === 0 && !simRunning && (
-                  <div className="flex h-full items-center justify-center text-[13px] text-ink-400">
-                    点击「播放」后，评论将按时间轴实时流入
-                  </div>
-                )}
-                <AnimatePresence initial={false}>
-                  {liveComments.map((c) => (
-                    <motion.div
-                      key={c.id}
-                      layout
-                      initial={{ opacity: 0, y: -10, height: 0 }}
-                      animate={{ opacity: 1, y: 0, height: "auto" }}
-                      exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="mb-1.5 flex items-start gap-2.5 overflow-hidden rounded-lg border border-ink-800 bg-ink-950 px-3 py-2"
-                    >
-                      <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${SENTIMENT[c.sentiment].dot}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] leading-snug text-ink-100">{c.content}</div>
-                        <div className="mt-0.5 text-xs text-ink-400">
-                          {c.author} · {c.platform}
-                        </div>
-                      </div>
-                      <Badge tone={c.sentiment}>{SENTIMENT[c.sentiment].label}</Badge>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
-          </Card>
-
-          {/* 图表区 */}
-          {stats ? (
-            <div className="mt-4">
-              {stats.analyzed === 0 && (
-                <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-800/40 bg-amber-950/20 px-3.5 py-2.5 text-[13px] text-amber-300">
-                  <Info size={14} className="shrink-0" />
-                  该数据集尚未分析（{stats.total} 条评论待处理），去「智能分析」开始后情感 / 趋势 / 主题将出现数据
-                </div>
-              )}
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card>
-                  <CardHeader icon={<Radar size={15} />} title="情感分布" />
-                  <div className="p-3">
-                    {stats.analyzed === 0 ? (
-                      <NotAnalyzed h="h-56" />
-                    ) : (
-                      <EChart option={chartOptions?.donut ?? {}} className="h-56" />
-                    )}
-                  </div>
-                </Card>
-                <Card>
-                  <CardHeader icon={<Activity size={15} />} title="评论趋势（按天）" />
-                  <div className="p-3">
-                    {stats.analyzed === 0 ? (
-                      <NotAnalyzed h="h-56" />
-                    ) : (
-                      <EChart option={chartOptions?.trend ?? {}} className="h-56" />
-                    )}
-                  </div>
-                </Card>
-                <Card>
-                  <CardHeader
-                    icon={<Tags size={15} />}
-                    title="热门主题"
-                    extra={topicFilter && (
-                      <span className="flex items-center gap-1 text-xs text-accent-400">
-                        {topicFilter}
-                        <button onClick={() => setTopicFilter(null)} className="hover:text-ink-100">
-                          <X size={12} />
-                        </button>
-                      </span>
-                    )}
-                  />
-                  <div className="p-3">
-                    {stats.analyzed === 0 ? (
-                      <NotAnalyzed h="h-52" />
-                    ) : (
-                      <EChart
-                        option={chartOptions?.topic ?? {}}
-                        className="h-52"
-                        onEvents={{
-                          click: (p: unknown) => {
-                            const name = (p as { name?: string })?.name;
-                            if (name) setTopicFilter(name);
-                          },
-                        }}
-                      />
-                    )}
-                  </div>
-                </Card>
-                <Card>
-                  <CardHeader icon={<MessageSquareText size={15} />} title="关键词云（内容词频）" />
-                  <div className="p-3">
-                    <EChart option={chartOptions?.wordcloud ?? {}} className="h-52" />
-                  </div>
-                </Card>
-              </div>
-
-              {/* 时段对比（#6） */}
-              <Card className="mt-4">
-                <CardHeader icon={<Scale size={15} />} title="时段对比" extra={<span className="text-xs text-ink-400">两个时间段的评论情况对比</span>} />
-                <div className="p-4">
-                  <div className="flex flex-wrap items-end gap-4">
-                    <RangeField label="时段 A" range={rangeA} onChange={setRangeA} />
-                    <RangeField label="时段 B" range={rangeB} onChange={setRangeB} />
-                  </div>
-                  {statsA && statsB && (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                      <div className="rounded-xl border border-ink-800 bg-ink-950 p-3">
-                        <div className="mb-2 text-xs font-medium text-ink-300">
-                          {rangeA.from} ~ {rangeA.to}（{statsA.total} 条）
-                        </div>
-                        <EChart option={compareDonut(statsA)} className="h-40" />
-                      </div>
-                      <div className="rounded-xl border border-ink-800 bg-ink-950 p-3">
-                        <div className="mb-2 text-xs font-medium text-ink-300">
-                          {rangeB.from} ~ {rangeB.to}（{statsB.total} 条）
-                        </div>
-                        <EChart option={compareDonut(statsB)} className="h-40" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            </div>
-          ) : (
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <Card className="p-4"><Skeleton className="h-52 w-full" /></Card>
-              <Card className="p-4"><Skeleton className="h-52 w-full" /></Card>
-            </div>
-          )}
-
-          {/* 最近评论（可点击看详情 + 主题钻取联动） */}
-          <Card className="mt-4">
-            <CardHeader
-              icon={<Gauge size={15} />}
-              title={topicFilter ? `「${topicFilter}」相关评论` : "最近评论"}
-              extra={topicFilter && (
-                <Button size="sm" variant="ghost" onClick={() => setTopicFilter(null)}>
-                  清除筛选
-                </Button>
-              )}
-            />
-            <div className="divide-y divide-ink-800">
-              {commentsRes?.comments.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedComment(c)}
-                  className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-ink-850"
-                >
-                  <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${SENTIMENT[c.sentiment].dot}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] text-ink-100">{c.content}</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-400">
-                      <span>{c.author}</span>
-                      <span>·</span>
-                      <span>{c.platform}</span>
-                      <span className="ml-auto tabular-nums">{new Date(c.timestamp).toLocaleString("zh-CN")}</span>
-                    </div>
-                    {c.topics.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {c.topics.map((t) => (
-                          <span key={t} className="cursor-pointer rounded-md bg-ink-800 px-1.5 py-0.5 text-xs text-ink-300 hover:bg-ink-700">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Card>
+          <OverviewStats stats={stats} current={current} />
+          <LiveMonitor
+            simRunning={simRunning}
+            speed={speed}
+            onSpeedChange={(v) => void changeSpeed(v)}
+            onToggleSim={() => void toggleSim()}
+            simError={simError}
+            inflow={inflow}
+            windowNegRate={windowNegRate}
+            alerts={alerts}
+            onDismissAlert={(id) => setAlerts((prev) => prev.filter((x) => x.id !== id))}
+            liveComments={liveComments}
+          />
+          <ChartGrid
+            stats={stats}
+            chartOptions={chartOptions}
+            topicFilter={topicFilter}
+            onTopicFilterChange={setTopicFilter}
+            rangeA={rangeA}
+            rangeB={rangeB}
+            onRangeAChange={setRangeA}
+            onRangeBChange={setRangeB}
+            statsA={statsA}
+            statsB={statsB}
+          />
+          <RecentComments
+            comments={commentsRes?.comments}
+            topicFilter={topicFilter}
+            onTopicFilterChange={setTopicFilter}
+            onSelect={setSelectedComment}
+          />
         </>
       )}
 

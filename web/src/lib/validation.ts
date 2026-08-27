@@ -7,6 +7,21 @@ import { z } from "zod";
  */
 
 export const SENTIMENTS = ["pos", "neu", "neg"] as const;
+export const RULE_TYPES = ["negativity", "volume", "keyword"] as const;
+
+// ============ 分析运行：必填校验（对应后端 createAnalysisBodySchema,与设置页可留空的 aiSettingsSchema 互补） ============
+
+/**
+ * 运行分析时必须填齐 API 配置（与后端 createAnalysisBodySchema 的约束一致）：
+ * 设置页允许留空保存,但点击「开始分析」前必须校验必填,避免把空配置发给后端。
+ */
+export const analysisRunSchema = z.object({
+  apiKey: z.string().trim().min(1).max(1024),
+  baseUrl: z.string().trim().min(1).max(2048),
+  model: z.string().trim().min(1).max(128),
+  temperature: z.number().min(0).max(2),
+});
+export type AnalysisRunInput = z.infer<typeof analysisRunSchema>;
 
 // ============ 设置页：AI 服务配置（对应后端 createAnalysisBodySchema） ============
 
@@ -38,10 +53,11 @@ export const pasteImportSchema = z.object({
 });
 export type PasteImportInput = z.infer<typeof pasteImportSchema>;
 
-// ============ 导入页：CSV 导入（每条评论字段同后端 importCommentSchema） ============
+// ============ 导入页：CSV 导入（每条评论字段同后端 importCommentSchema,content 可缺省由解析层兜底） ============
 
 export const csvImportRowSchema = z.object({
-  content: z.string().min(1).max(2000),
+  content: z.string().max(2000).optional(),
+  text: z.string().max(2000).optional(),
   author: z.string().max(64).optional(),
   platform: z.string().max(64).optional(),
   sentiment: z.enum(SENTIMENTS).optional(),
@@ -70,7 +86,7 @@ export type FeedImportInput = z.infer<typeof feedImportSchema>;
 
 export const alertRuleSchema = z
   .object({
-    type: z.enum(["negativity", "volume", "keyword"]),
+    type: z.enum(RULE_TYPES),
     threshold: z.coerce.number().min(0).max(100000),
     keyword: z.string().trim().max(255),
   })

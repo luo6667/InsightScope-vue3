@@ -1,9 +1,13 @@
+'use client';
+
 import { Check, Pencil, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { updateComment } from "../api/api";
 import type { CommentRow } from "../api/types";
+import { errMsg } from "../lib/errors";
+import { formatTime } from "../lib/format";
 import { Badge, Button, Input } from "./ui";
 
 interface Props {
@@ -47,7 +51,7 @@ export default function CommentModal({ datasetId, comment, onClose, onSaved }: P
         onClose();
       }, 600);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setSaving(false);
     }
@@ -87,7 +91,7 @@ export default function CommentModal({ datasetId, comment, onClose, onSaved }: P
                 <span>{comment.author}</span>
                 <span>·</span>
                 <span>{comment.platform}</span>
-                <span className="ml-auto tabular-nums">{new Date(comment.timestamp).toLocaleString("zh-CN")}</span>
+                <span className="ml-auto tabular-nums">{formatTime(comment.timestamp)}</span>
               </div>
               {comment.keywords.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">

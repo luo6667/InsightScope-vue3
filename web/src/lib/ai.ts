@@ -1,11 +1,18 @@
 import type { AiConfig } from "../store/settings";
+import { getAccessToken } from "./auth";
 
 export interface ChatMessage {
   role: "system" | "user";
   content: string;
 }
 
-/** 前端直连 AI 服务商（OpenAI / DeepSeek 兼容协议），SSE 流式输出 */
+/**
+ * AI 流式对话（SSE 打字机效果）
+ *
+ * 浏览器 → POST /api/ai（Next route handler）→ 服务端转发到 OpenAI / DeepSeek 兼容接口 → SSE 透传。
+ * apiKey 由用户在前端「设置」页填写（存 localStorage），随请求体传给服务端，仅本次请求内存使用、不落库。
+ * 好处：解决浏览器直连第三方 AI 的 CORS 问题（OpenAI 官方会拒绝），key 不直接暴露在请求 URL。
+ */
 export async function streamChat(
   cfg: AiConfig,
   messages: ChatMessage[],
@@ -25,25 +32,39 @@ export async function streamChat(
   if (!/^[\x20-\x7e]+$/.test(base)) {
     throw new Error("Base URL 包含非 ASCII 字符，请检查");
   }
-  const res = await fetch(`${base}/chat/completions`, {
+
+  const token = getAccessToken();
+  const res = await fetch("/api/ai", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+      // proxy(访问控制)启用时 /api/* 需要 Bearer token,与 axios 拦截器行为一致
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
+      baseUrl: base,
+      apiKey: key,
       model: cfg.model.trim(),
       messages,
-      stream: true,
       temperature: cfg.temperature,
-      max_tokens: 2000,
     }),
     signal,
   });
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
-    throw new Error(`AI 请求失败（${res.status}）：${text.slice(0, 200)}`);
+    // 优先提取 AI / route handler 返回的错误信息
+    let msg = `AI 请求失败（${res.status}）`;
+    try {
+      const j = JSON.parse(text) as { error?: string | { message?: string } };
+      if (typeof j.error === "string" && j.error) msg = j.error;
+      else if (j.error && typeof j.error === "object" && j.error.message) msg = j.error.message;
+    } catch {
+      if (text) msg = `${msg}：${text.slice(0, 200)}`;
+    }
+    throw new Error(msg);
   }
+
+  // SSE 解析（route handler 透传 AI 的 data: 行，格式与直连一致）
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";

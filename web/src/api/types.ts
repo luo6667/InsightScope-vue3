@@ -1,4 +1,7 @@
-export type Sentiment = "pos" | "neu" | "neg";
+import { RULE_TYPES, SENTIMENTS } from "../lib/validation";
+
+/** 情感枚举：以 lib/validation.ts 的 SENTIMENTS 为单一来源,避免三处重复字面量 */
+export type Sentiment = (typeof SENTIMENTS)[number];
 
 export interface DatasetInfo {
   id: string;
@@ -61,7 +64,7 @@ export interface AnalysisJob {
 export interface AlertRule {
   id: string;
   datasetId: string;
-  type: "negativity" | "volume" | "keyword";
+  type: (typeof RULE_TYPES)[number];
   threshold: number;
   keyword: string;
   enabled: boolean;
@@ -70,7 +73,7 @@ export interface AlertRule {
 export interface Alert {
   id: string;
   datasetId: string;
-  type: "negativity" | "volume" | "keyword";
+  type: (typeof RULE_TYPES)[number];
   severity: "critical" | "warning" | "info";
   message: string;
   value: number;

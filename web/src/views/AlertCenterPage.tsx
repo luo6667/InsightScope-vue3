@@ -4,9 +4,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { ackAlert, createRule, deleteRule, updateRule } from "../api/api";
+import DatasetPicker from "../components/DatasetPicker";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
 import { useAlertRules, useAlerts,useDatasets } from "../hooks/useData";
+import { errMsg } from "../lib/errors";
+import { formatTime } from "../lib/format";
 import { alertRuleSchema, firstError } from "../lib/validation";
 
 const typeLabel: Record<string, string> = {
@@ -54,14 +57,7 @@ export default function AlertCenterPage() {
                 {unacked} 条未确认
               </span>
             )}
-            <Select value={datasetId} onChange={(e) => setDatasetId(e.target.value)} className="w-56">
-              <option value="">选择数据集…</option>
-              {datasets?.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
+            <DatasetPicker datasets={datasets} datasetId={datasetId} onChange={setDatasetId} showCount={false} />
           </div>
         }
       />
@@ -143,7 +139,7 @@ export default function AlertCenterPage() {
                         )}
                       </div>
                       <div className="mt-1 text-xs text-ink-400">
-                        {typeLabel[a.type]} · {new Date(a.triggeredAt).toLocaleString("zh-CN")}
+                        {typeLabel[a.type]} · {formatTime(a.triggeredAt)}
                         {a.acknowledged && " · 已确认"}
                       </div>
                     </div>
@@ -172,7 +168,7 @@ function RuleForm({ datasetId }: { datasetId: string }) {
       setKeyword("");
       toast.success("告警规则已创建");
     },
-    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+    onError: (e) => setError(errMsg(e)),
   });
 
   const submit = () => {

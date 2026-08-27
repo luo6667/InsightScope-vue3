@@ -131,13 +131,20 @@ export const patchCommentBodySchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: "没有可更新的字段" });
 
-export const createRuleBodySchema = z.object({
-  datasetId: z.string().regex(/^\d+$/, "数据集 ID 不合法").max(64),
-  type: z.enum(RULE_TYPES),
-  threshold: z.number().min(0).max(100_000),
-  keyword: z.string().max(255).optional(),
-  enabled: z.boolean().optional(),
-});
+/** 创建规则：keyword 类型必须带关键词（与前端 alertRuleSchema 的 superRefine 对齐） */
+export const createRuleBodySchema = z
+  .object({
+    datasetId: z.string().regex(/^\d+$/, "数据集 ID 不合法").max(64),
+    type: z.enum(RULE_TYPES),
+    threshold: z.number().min(0).max(100_000),
+    keyword: z.string().max(255).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.type === "keyword" && !v.keyword) {
+      ctx.addIssue({ code: "custom", message: "敏感关键词规则必须填写关键词", path: ["keyword"] });
+    }
+  });
 
 export const updateRuleBodySchema = z
   .object({

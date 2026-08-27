@@ -4,10 +4,13 @@ import { motion } from "motion/react";
 import { useState } from "react";
 
 import { cancelAnalysis, pauseAnalysis, resetAnalysis, resumeAnalysis, startAnalysis } from "../api/api";
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Select } from "../components/ui";
+import DatasetPicker from "../components/DatasetPicker";
+import { Badge, Button, Card, CardHeader, EmptyState, PageHeader } from "../components/ui";
 import { useCurrentDataset } from "../hooks/useCurrentDataset";
 import { useAnalysisJob,useDatasets } from "../hooks/useData";
 import { useDatasetSocket } from "../hooks/useDatasetSocket";
+import { errMsg } from "../lib/errors";
+import { analysisRunSchema, firstError } from "../lib/validation";
 import { useSettings } from "../store/settings";
 
 const jobTone: Record<string, "neutral" | "pos" | "neg" | "accent"> = {
@@ -41,7 +44,7 @@ export default function AnalysisPage() {
       await fn();
       qc.invalidateQueries({ queryKey: ["job", datasetId] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setBusy(false);
     }
@@ -56,14 +59,7 @@ export default function AnalysisPage() {
         title="智能分析"
         desc="AI 批量分析评论：情感 / 主题 / 关键词"
         extra={
-          <Select value={datasetId} onChange={(e) => setDatasetId(e.target.value)} className="w-56">
-            <option value="">选择数据集…</option>
-            {datasets?.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}（{d.commentCount} 条）
-              </option>
-            ))}
-          </Select>
+          <DatasetPicker datasets={datasets} datasetId={datasetId} onChange={setDatasetId} />
         }
       />
 
@@ -80,13 +76,17 @@ export default function AnalysisPage() {
       {datasetId && (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button variant="primary" disabled={busy || !!active} onClick={() => void run(() => startAnalysis(datasetId, {
-              apiKey: settings.apiKey,
-              baseUrl: settings.baseUrl,
-              model: settings.model,
-              temperature: settings.temperature,
-              concurrency: 6,
-            }))}>
+            <Button variant="primary" disabled={busy || !!active} onClick={() => void run(() => {
+              // 运行前必填校验（与后端 createAnalysisBodySchema 对齐）:设置页允许留空,但分析必须填齐
+              const parsed = analysisRunSchema.safeParse({
+                apiKey: settings.apiKey,
+                baseUrl: settings.baseUrl,
+                model: settings.model,
+                temperature: settings.temperature,
+              });
+              if (!parsed.success) throw new Error(firstError(parsed.error));
+              return startAnalysis(datasetId, { ...parsed.data, concurrency: 6 });
+            })}>
               <Play size={15} />
               开始分析
             </Button>
