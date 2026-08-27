@@ -1,5 +1,4 @@
 import "dotenv/config"; // 加载 server/.env（不覆盖已存在的环境变量）；.env.example 见仓库
-import { fileURLToPath } from "node:url";
 
 /**
  * 运行配置集中读取。
@@ -27,6 +26,13 @@ export const RATE_LIMIT_PER_MIN = Number(process.env.RATE_LIMIT_PER_MIN ?? 0);
 export const ENABLE_MOCK_AI = process.env.ENABLE_MOCK_AI === "true";
 
 /**
+ * feedUrl 定时抓取是否允许私网/内网/本机地址（如 http://127.0.0.1:8080 的本地评论服务）。
+ * 默认允许（本地/演示场景开箱即用）；生产环境如需恢复 SSRF 严格校验，设为 0。
+ * 仅影响 feedUrl（定时抓取），AI 服务的 baseUrl 校验始终严格（analysis.ts）。
+ */
+export const ALLOW_PRIVATE_FEED_URL = (process.env.ALLOW_PRIVATE_FEED_URL ?? "1") !== "0";
+
+/**
  * 访问口令（Bearer token）：设置后所有 /api/* 与 socket.io 连接必须携带，
  * 否则返回 401。未设置 = 开发模式，不启用认证（启动时有警告）。
  */
@@ -34,10 +40,6 @@ export const ACCESS_TOKEN = (process.env.ACCESS_TOKEN ?? "").trim();
 
 /** 是否要求访问口令（ACCESS_TOKEN 已设置 = 认证启用） */
 export const authRequired = ACCESS_TOKEN.length > 0;
-
-/** 前端构建产物目录（默认 ../web/dist） */
-export const WEB_DIST =
-  process.env.WEB_DIST ?? fileURLToPath(new URL("../../web/dist", import.meta.url));
 
 /** 生产强校验：列出所有未满足项并退出，一条不漏 */
 export function assertProductionConfig(): void {

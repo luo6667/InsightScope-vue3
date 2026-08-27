@@ -1,7 +1,8 @@
 import { Router } from "express";
+import { ALLOW_PRIVATE_FEED_URL } from "../config.js";
 import { DatasetModel, CommentModel, AnalysisJobModel, AlertModel, AlertRuleModel } from "../models.js";
 import { generateScenarioComments, getScenario } from "../services/scenarioService.js";
-import { startFeed, stopFeed } from "./feeds.js";
+import { stopFeed } from "./feeds.js";
 import { cancelJobsForDataset } from "./analysis.js";
 import { normalizeComment, dedupKeyOf } from "../utils/commentUtils.js";
 import { assertPublicHttpUrl } from "../utils/urlSafety.js";
@@ -97,13 +98,14 @@ router.post("/", validate({ body: createDatasetBodySchema }), async (req, res) =
       type: "imported",
     });
     const now = Date.now();
-    // 去重规则（全项目统一）：同一作者发相同内容只留一条；不同作者发相同内容都保留
+    // 去重规则（全项目统一）：评论显式携带的全部字段重合才算重复（见 commentUtils.dedupKeyOf）
     const seen = new Set<string>();
     let i = 0;
     const docs = comments
       .filter((c) => {
-        const author = c.author ? String(c.author) : "匿名用户";
-        const key = dedupKeyOf(c as never, author);
+        // 防御：导入数据可能混入 null / 标量元素
+        if (!c || typeof c !== "object") return false;
+        const key = dedupKeyOf(c as never);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -122,7 +124,7 @@ router.post("/", validate({ body: createDatasetBodySchema }), async (req, res) =
     // SSRF 防护：绝对 URL 必须为公网地址；相对路径（如 /api/demo/feed）仅指向后端自身
     const trimmed = feedUrl.trim();
     if (!trimmed.startsWith("/")) {
-      assertPublicHttpUrl(trimmed, "feedUrl");
+      assertPublicHttpUrl(trimmed, "feedUrl", { allowPrivate: ALLOW_PRIVATE_FEED_URL });
     }
     const dataset = await DatasetModel.create({
       name: name?.trim() || `定时抓取 ${new Date().toLocaleDateString("zh-CN")}`,
@@ -131,9 +133,9 @@ router.post("/", validate({ body: createDatasetBodySchema }), async (req, res) =
       feedUrl: trimmed,
       // schema 已保证为 1-1440 的整数（修复：此前 NaN 会入库、超大值会撑爆 setInterval）
       feedIntervalMin: feedIntervalMin ?? 5,
-      feedRunning: true,
+      // 手动启动：创建后不自动抓取，用户点「启动」才运行（避免“没启动却在抓”）
+      feedRunning: false,
     });
-    await startFeed(dataset.id); // 立即抓一次 + 定时
     return res.status(201).json({ id: dataset.id, count: 0, feed: true });
   }
 

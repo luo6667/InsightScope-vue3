@@ -8,7 +8,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)](https://expressjs.com)
 [![MySQL](https://img.shields.io/badge/MySQL-Sequelize-4479A1?logo=mysql&logoColor=white)](https://sequelize.org)
@@ -53,7 +53,7 @@ InsightScope 是一个前端为主的 AI 全栈项目，帮助产品 / 运营 / 
 
 | 层 | 技术 |
 |---|---|
-| 前端 | Vite · React 19 · TypeScript · Tailwind CSS 4 · Zustand · TanStack Query · ECharts（词云）· framer-motion · socket.io-client |
+| 前端 | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Zustand · TanStack Query · ECharts（词云）· framer-motion · socket.io-client |
 | 后端 | Express · Sequelize (MySQL) · socket.io · axios |
 | AI | OpenAI 兼容 `/chat/completions`（OpenAI / DeepSeek）· SSE 流式输出 |
 
@@ -67,13 +67,56 @@ cd server
 npm install
 npm run dev
 
-# 2. 启动前端（http://localhost:5175，/api 与 /socket.io 已代理）
+# 2. 启动前端（http://localhost:3000，/api 由 rewrites 代理；socket.io 直连后端）
 cd web
 npm install
 npm run dev
 ```
 
-然后打开 `http://localhost:5175` → 导入一个内置场景 → 点「▶ 播放模拟」→ 看监控台"活"起来。
+然后打开 `http://localhost:3000` → 导入一个内置场景 → 点「▶ 播放模拟」→ 看监控台"活"起来。
+
+## 🚀 生产部署（nginx 反代）
+
+三个进程：Next.js（前端，默认 3000）、Express（API + socket.io，5176）、nginx（入口 80）。
+
+```bash
+# 1. 构建前端（生产 rewrites 已关闭，/api 不再由 Next 代理）
+cd web && npm run build && npm run start   # 或 output:'standalone' 容器化
+
+# 2. 构建并启动后端（只提供 API + socket.io）
+cd server && npm run build && npm start
+```
+
+前端环境变量（构建时注入）：`NEXT_PUBLIC_API_BASE=/api`、`NEXT_PUBLIC_SOCKET_URL=`（同源走 nginx，留空）、
+访问控制 `NEXT_ACCESS_TOKEN`（与后端 `ACCESS_TOKEN` 同值，且需在构建阶段注入）。
+
+nginx 示例（`/api/ai` 是 Next 的 route handler，必须精确转发到 Next；其余 API 与 socket 转 Express）：
+
+```nginx
+server {
+  listen 80;
+  server_name your-domain.com;
+
+  # Next.js 前端（页面、静态资源、/api/ai）
+  location /api/ai { proxy_pass http://127.0.0.1:3000; proxy_http_version 1.1; proxy_set_header Host $host; }
+  location /      { proxy_pass http://127.0.0.1:3000; proxy_http_version 1.1; proxy_set_header Host $host; }
+
+  # Express API
+  location /api/  { proxy_pass http://127.0.0.1:5176; proxy_http_version 1.1; proxy_set_header Host $host; }
+
+  # socket.io（WebSocket 需要 Upgrade 头）
+  location /socket.io/ {
+    proxy_pass http://127.0.0.1:5176;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+  }
+}
+```
+
+> 后端 `ACCESS_TOKEN` 启用后，nginx 层之后仍有双重校验：`/api/*` 由 Express 的 `requireAccessToken` 校验；
+> 直达 Next 的 `/api/ai` 由 Next 的 `proxy.ts` 校验（`NEXT_ACCESS_TOKEN` 与后端同值）。
 
 ## 🧭 三分钟演示
 
@@ -93,11 +136,13 @@ npm run dev
 │       ├── routes/       # datasets / comments / analysis / alerts / simulate / feeds
 │       ├── services/     # 场景生成器 / Z-score 异常检测
 │       └── index.ts      # 入口（Express + socket.io + MySQL）
-└── web/                  # Vite + React 19 + Tailwind 4
+└── web/                  # Next.js 16 (App Router) + React 19 + Tailwind 4
     └── src/
-        ├── pages/        # 数据集 / 导入 / 监控台 / 分析 / 报告 / 告警中心 / 设置
-        ├── components/   # ECharts 封装等
+        ├── app/          # App Router 路由（(site)/* 各页面 + api/ai 转发）
+        ├── views/        # 各页面组件（监控台 / 导入 / 报告 / 告警 / 分析 / 设置）
+        ├── components/   # 公共组件（ui / ECharts 封装 / dashboard 子组件等）
         ├── api/          # axios 封装与 API 层
-        ├── lib/          # AI 流式调用 / echarts / socket
+        ├── hooks/        # React Query / socket 等自定义 hooks
+        ├── lib/          # AI 流式调用 / echarts / 校验 / 工具
         └── store/        # zustand 状态
 ```

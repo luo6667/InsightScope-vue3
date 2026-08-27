@@ -3,7 +3,6 @@ import axios from "axios";
 import { getAccessToken, notifyUnauthorized } from "../lib/auth";
 
 export const http = axios.create({
-  // 生产部署到独立 API 域名时用 VITE_API_BASE 覆盖；默认同源 /api
   // 生产部署到独立 API 域名时用 NEXT_PUBLIC_API_BASE 覆盖；默认同源 /api（Next rewrites 代理到 Express）
   baseURL: process.env.NEXT_PUBLIC_API_BASE ?? "/api",
   timeout: 30000,

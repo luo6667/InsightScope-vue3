@@ -4,9 +4,15 @@ import { HttpError } from "./httpUtils.js";
 /**
  * SSRF 防护：校验用户提供的 URL 只允许公网 http/https，
  * 拒绝内网/环回/链路本地/云元数据地址，防止服务器被当作代理扫描内网。
+ * opts.allowPrivate=true 时跳过私网/本地地址校验（保留协议/凭据/格式校验），
+ * 供 feedUrl 定时抓取本地评论服务等场景使用（见 config.ts 的 ALLOW_PRIVATE_FEED_URL）。
  * 返回去除尾部斜杠的规范化 URL；非法时抛 HttpError(400)。
  */
-export function assertPublicHttpUrl(raw: unknown, field = "URL"): string {
+export function assertPublicHttpUrl(
+  raw: unknown,
+  field = "URL",
+  opts?: { allowPrivate?: boolean }
+): string {
   const s = String(raw ?? "").trim().replace(/\/+$/, "");
   if (!s) throw new HttpError(400, `${field}不能为空`);
   let u: URL;
@@ -22,18 +28,20 @@ export function assertPublicHttpUrl(raw: unknown, field = "URL"): string {
     throw new HttpError(400, `${field}不允许包含用户名/密码`);
   }
   const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  // 域名形式的内网别名
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "0.0.0.0" ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal")
-  ) {
-    throw new HttpError(400, `${field}不允许访问本地/内网地址`);
-  }
-  if (isIP(host) !== 0 && isPrivateAddress(host)) {
-    throw new HttpError(400, `${field}不允许访问私网/内网地址`);
+  if (!opts?.allowPrivate) {
+    // 域名形式的内网别名
+    if (
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host === "0.0.0.0" ||
+      host.endsWith(".local") ||
+      host.endsWith(".internal")
+    ) {
+      throw new HttpError(400, `${field}不允许访问本地/内网地址`);
+    }
+    if (isIP(host) !== 0 && isPrivateAddress(host)) {
+      throw new HttpError(400, `${field}不允许访问私网/内网地址`);
+    }
   }
   return s;
 }

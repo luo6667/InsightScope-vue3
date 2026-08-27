@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from "express";
+import { ALLOW_PRIVATE_FEED_URL } from "../config.js";
 import { CommentModel, DatasetModel } from "../models.js";
 import { io } from "../index.js";
 import { normalizeComment, buildDedupFilter } from "../utils/commentUtils.js";
@@ -37,8 +38,8 @@ async function doFetchFeed(datasetId: string): Promise<number> {
   if (raw.startsWith("/")) {
     url = `http://127.0.0.1:${Number(process.env.PORT ?? 5176)}${raw}`;
   } else {
-    // SSRF 防护：绝对 URL 必须为公网地址（防御 DB 中已存在的旧数据）
-    url = assertPublicHttpUrl(raw, "feedUrl");
+    // SSRF 防护：绝对 URL 默认必须为公网地址;ALLOW_PRIVATE_FEED_URL=1 时允许抓取本地/内网评论服务
+    url = assertPublicHttpUrl(raw, "feedUrl", { allowPrivate: ALLOW_PRIVATE_FEED_URL });
   }
 
   try {
@@ -58,14 +59,15 @@ async function doFetchFeed(datasetId: string): Promise<number> {
       throw new Error("数据源不是合法 JSON 数组（或 { comments: [...] }）");
     }
 
-    // 去重规则（全项目统一）：带 id 按 id；无 id 按「内容+作者」——同作者重复发相同内容不累积，不同作者相同内容保留
+    // 去重规则（全项目统一）：评论显式携带的全部字段重合才算重复（见 commentUtils.buildDedupFilter）
     const now = Date.now();
     let inserted = 0;
     for (const item of arr.slice(0, 200)) {
+      // 防御：数据源可能混入 null / 标量元素,跳过而非报错
+      if (!item || typeof item !== "object") continue;
       const raw = item as Record<string, unknown>;
-      const author = raw.author ? String(raw.author) : "匿名用户";
       const dup = await CommentModel.findOne({
-        where: { datasetId, ...buildDedupFilter(raw, author) },
+        where: { datasetId, ...buildDedupFilter(raw) },
         attributes: ["id"],
       });
       if (dup) continue;
@@ -148,26 +150,35 @@ router.post("/:datasetId/feed/pull", validate({ params: datasetIdParamSchema }),
   res.json({ ok: true, count });
 });
 
-// 本地演示数据源：GET /api/demo/feed（每次返回不同评论，便于演示持续抓取 + 去重）
-const DEMO_POOL: { pos: string[]; neu: string[]; neg: string[] } = {
-  pos: ["新版本用起来很顺手，给个好评", "客服响应很及时，问题马上解决了", "功能越来越完善，推荐", "物流很快，第二天就到了", "质量超出预期，会回购"],
-  neu: ["一般般吧，没什么特别的", "观望中，等后续版本看看", "中规中矩，能用", "包装有点简陋，其他还好"],
-  neg: ["等待时间太久了，体验很差", "质量有问题，联系客服半天没人理", "更新后反而卡顿了，后悔升级", "货不对板，和描述不符", "售后流程太繁琐，浪费时间"],
-};
-const DEMO_AUTHORS = ["青柠", "小鹿", "Nova", "老白", "阿茶", "格子衫"];
+// 本地演示数据源：GET /api/demo/feed（每次随机返回池中若干条,字段稳定——内容/作者/情感绑定、
+// 不带动态时间戳,因此定时抓取可按「显式字段全部重合」规则去重,不会无限增长）
+const DEMO_POOL: { content: string; author: string; sentiment: "pos" | "neu" | "neg" }[] = [
+  { content: "新版本用起来很顺手，给个好评", author: "青柠", sentiment: "pos" },
+  { content: "客服响应很及时，问题马上解决了", author: "小鹿", sentiment: "pos" },
+  { content: "功能越来越完善，推荐", author: "Nova", sentiment: "pos" },
+  { content: "物流很快，第二天就到了", author: "老白", sentiment: "pos" },
+  { content: "质量超出预期，会回购", author: "阿茶", sentiment: "pos" },
+  { content: "一般般吧，没什么特别的", author: "格子衫", sentiment: "neu" },
+  { content: "观望中，等后续版本看看", author: "青柠", sentiment: "neu" },
+  { content: "中规中矩，能用", author: "小鹿", sentiment: "neu" },
+  { content: "包装有点简陋，其他还好", author: "Nova", sentiment: "neu" },
+  { content: "等待时间太久了，体验很差", author: "老白", sentiment: "neg" },
+  { content: "质量有问题，联系客服半天没人理", author: "阿茶", sentiment: "neg" },
+  { content: "更新后反而卡顿了，后悔升级", author: "格子衫", sentiment: "neg" },
+  { content: "货不对板，和描述不符", author: "青柠", sentiment: "neg" },
+  { content: "售后流程太繁琐，浪费时间", author: "小鹿", sentiment: "neg" },
+];
 // 挂载到 /api 下（index.ts 注册）
 export const demoFeedHandler: RequestHandler = (_req, res) => {
+  // 每次随机返回 3~5 条；字段固定(content/author/platform/sentiment,无 timestamp)→ 已入库的会被去重跳过
   const n = 3 + Math.floor(Math.random() * 3);
   const comments = Array.from({ length: n }, () => {
-    const roll = Math.random();
-    const sentiment = roll < 0.4 ? "pos" : roll < 0.65 ? "neu" : "neg";
-    const content = DEMO_POOL[sentiment][Math.floor(Math.random() * DEMO_POOL[sentiment].length)];
+    const item = DEMO_POOL[Math.floor(Math.random() * DEMO_POOL.length)];
     return {
-      content,
-      author: DEMO_AUTHORS[Math.floor(Math.random() * DEMO_AUTHORS.length)],
+      content: item.content,
+      author: item.author,
       platform: "演示数据源",
-      sentiment,
-      timestamp: new Date().toISOString(),
+      sentiment: item.sentiment,
     };
   });
   res.json({ comments });

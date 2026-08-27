@@ -4,9 +4,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { ZodError } from "zod";
 import { createServer } from "node:http";
-import path from "node:path";
 import { Server } from "socket.io";
-import { Op } from "sequelize";
 import { initDb, sequelize, dbUriSummary } from "./db.js";
 import { HttpError } from "./utils/httpUtils.js";
 import {
@@ -14,7 +12,6 @@ import {
   CORS_ORIGINS,
   RATE_LIMIT_PER_MIN,
   ENABLE_MOCK_AI,
-  WEB_DIST,
   authRequired as ACCESS_REQUIRED,
   assertProductionConfig,
 } from "./config.js";
@@ -24,7 +21,7 @@ import commentsRouter from "./routes/comments.js";
 import alertsRouter from "./routes/alerts.js";
 import analysisRouter from "./routes/analysis.js";
 import simulateRouter from "./routes/simulate.js";
-import feedsRouter, { demoFeedHandler, startFeed } from "./routes/feeds.js";
+import feedsRouter, { demoFeedHandler } from "./routes/feeds.js";
 import { DatasetModel } from "./models.js";
 import { listScenarios } from "./services/scenarioService.js";
 
@@ -189,15 +186,8 @@ app.use("/api", (_req, res) => {
   res.status(404).json({ error: "接口不存在" });
 });
 
-// 生产部署：托管前端构建产物（web/dist），未命中静态文件时回退 index.html（SPA）
-const distDir = path.resolve(WEB_DIST);
-app.use(express.static(distDir));
-app.get("/{*splat}", (req, res, next) => {
-  if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) return next();
-  res.sendFile(path.join(distDir, "index.html"), (err) => {
-    if (err) next();
-  });
-});
+// 注：前端由 Next.js 独立服务（next start / standalone），nginx 反代分发；
+// 本服务只提供 API + socket.io，不再托管前端静态产物（原 WEB_DIST/express.static 已移除）。
 
 // 统一错误处理：HttpError 带状态码；ZodError 防御兜底；其余 500（生产不泄露内部错误细节）
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -236,23 +226,11 @@ async function main() {
     process.exit(1);
   });
   httpServer.listen(PORT, () => {
-    console.log(`[insight-server] http://localhost:${PORT}（前端产物目录: ${distDir}）`);
+    console.log(`[insight-server] http://localhost:${PORT}（API + socket.io）`);
   });
 
-  // 恢复 server 重启前的定时抓取任务
-  try {
-    const feedDatasets = await DatasetModel.findAll({
-      where: { feedUrl: { [Op.ne]: "" }, feedRunning: true },
-    });
-    for (const d of feedDatasets) {
-      void startFeed(d.id).catch((e) => {
-        console.error(`[feed] restore failed: ${d.name}`, e instanceof Error ? e.message : e);
-      });
-      console.log(`[feed] restored: ${d.name}`);
-    }
-  } catch (e) {
-    console.error("[feed] restore error:", e instanceof Error ? e.message : e);
-  }
+  // 注：不自动恢复 server 重启前的定时抓取任务——feed 为手动启动模式（创建后不自动抓，
+  // 重启后需用户重新点「启动」，避免“没启动却在抓”）。
 }
 
 main();
