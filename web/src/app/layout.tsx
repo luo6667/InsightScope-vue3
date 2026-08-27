@@ -1,3 +1,13 @@
+/**
+ * 📘 app/layout.tsx —— 根布局（Server Component，无 'use client'）
+ *
+ * Next App Router 约定：layout.tsx 包裹所有页面，这里是全站 HTML 骨架：
+ * - metadata：页面标题 / 描述（SEO）；
+ * - 主题初始化脚本（beforeInteractive）：在 React 加载前读 localStorage 设置
+ *   data-theme，避免首帧浅/深色闪烁（FOUC）；
+ * - Providers（React Query + Toast）和 AccessGate（访问口令门禁）包住 children。
+ * 这个文件本身在服务端渲染，子组件才是客户端边界（各自标 'use client'）。
+ */
 import '@/index.css';
 
 import type { Metadata } from 'next';

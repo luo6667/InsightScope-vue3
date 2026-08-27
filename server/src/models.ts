@@ -1,3 +1,18 @@
+/**
+ * 📘 models.ts —— 数据库表结构定义（技术栈：Sequelize ORM 的 Model.init）
+ *
+ * 一张 MySQL 表 = 一个 Model 类，五张核心表：
+ * - Dataset    -> datasets 表（数据集：内置场景 / 导入 / 定时抓取）
+ * - Comment    -> comments 表（评论本体，业务主表）
+ * - AnalysisJob-> analysis_jobs 表（AI 分析任务状态）
+ * - AlertRule  -> alert_rules 表（告警规则）
+ * - Alert      -> alerts 表（告警记录）
+ *
+ * 三个要点：
+ * - id 用 BIGINT 自增，但 get() 里转成字符串返回——兼容原 MongoDB ObjectId 的字符串形态；
+ * - topics / keywords 用 MySQL JSON 列存数组（查询时可用 JSON_CONTAINS）；
+ * - 启动时 sequelize.sync() 会按这里的定义自动建表/加列（见 db.ts）。
+ */
 import { DataTypes, literal, Model, type CreationOptional } from "sequelize";
 import { sequelize } from "./db.js";
 

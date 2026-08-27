@@ -1,3 +1,13 @@
+/**
+ * 📘 hooks/useDatasetSocket.ts —— socket 事件订阅封装（技术栈：socket.io-client）
+ *
+ * 把“加入数据集房间 + 订阅事件 + 清理退订”封装成一个 hook：
+ * - 进入时 emit('join-dataset')，断线重连后自动重新 join（socket.io 重连是新连接，房间会丢）；
+ * - handlers 用 ref 保存最新引用：只在 datasetId 变化时重新订阅，
+ *   避免父组件每次渲染（handlers 新引用）都重订阅导致事件抖动；
+ * - 卸载时自动 off + leave。
+ * 监控台（实时评论/告警）和分析页（进度推送）都复用它。
+ */
 import { useEffect, useRef } from "react";
 
 import { getSocket } from "../lib/socket";

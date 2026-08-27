@@ -1,3 +1,12 @@
+/**
+ * 📘 config.ts —— 运行配置中心（技术栈：Node 环境变量 + dotenv）
+ *
+ * 整个 server 的“开关面板”，集中读取环境变量（.env 文件或系统环境）并导出常量：
+ * - PORT / MySQL 连接 / CORS 白名单 / 写接口限流 / 访问口令 ACCESS_TOKEN / feed 私网开关等；
+ * - 约定：NODE_ENV=production 时做“生产强校验”，密钥、口令没配就拒绝启动，
+ *   防止开发默认值（如 root/1234、无口令）被带到线上。
+ * 小白看项目建议先读这里：了解 server 有哪些可配置项、各默认值是什么。
+ */
 import "dotenv/config"; // 加载 server/.env（不覆盖已存在的环境变量）；.env.example 见仓库
 
 /**

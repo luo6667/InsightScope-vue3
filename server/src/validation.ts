@@ -1,3 +1,12 @@
+/**
+ * 📘 validation.ts —— 请求校验层（技术栈：zod）
+ *
+ * 为每个接口的 body / query / params 写一个 zod schema（描述“合法参数长什么样”），
+ * validate({...}) 中间件负责：解析 → 校验 → 不合法抛 HttpError(400) → 合法则替换 req.body。
+ * 好处：
+ * - 路由代码不用手写一堆 if/else 判参数（长度、枚举、范围、必填）；
+ * - 前端可 import 同一份 schema 用 z.infer 派生 TS 类型，前后端校验口径一致。
+ */
 import { z } from "zod";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { HttpError } from "./utils/httpUtils.js";

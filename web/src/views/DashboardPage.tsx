@@ -1,3 +1,15 @@
+/**
+ * 📘 views/DashboardPage.tsx —— 监控台页面（技术栈：React Query + socket + ECharts）
+ *
+ * 页面怎么“活”起来，三步：
+ * 1. useDatasets / useDatasetStats 拉数据 → 4 张 ECharts 图表
+ *    （图表 option 工厂在 components/dashboard/options.ts，纯函数好维护）；
+ * 2. useDatasetSocket 订阅实时事件：评论流入(comment:stream)、告警(alert:new)、
+ *    模拟器状态(sim:status)，用 setState 增量更新；
+ * 3. 图表 option 随 stats 计算（React Compiler 自动记忆化，stats 不变不重绘）。
+ * 渲染拆成 OverviewStats / LiveMonitor / ChartGrid / RecentComments 四个子组件，
+ * 状态与 socket 订阅集中在父组件统一管理。
+ */
 import { useQueryClient } from "@tanstack/react-query";
 import { Radar } from "lucide-react";
 import { useEffect, useState } from "react";

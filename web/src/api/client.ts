@@ -1,3 +1,13 @@
+/**
+ * 📘 api/client.ts —— HTTP 请求封装（技术栈：axios 实例 + 拦截器）
+ *
+ * 全局唯一的 axios 实例，所有请求都过这里：
+ * - baseURL 默认 /api：开发走 Next rewrites 代理到 Express，生产同源走 nginx；
+ * - 请求拦截器：自动带上访问口令 Authorization: Bearer <token>（后端启用时才校验）；
+ * - 响应拦截器：401 → 通知全局弹“输入口令”框；把网络/HTTP 错误统一转成 Error(message)，
+ *   页面 catch 到的都是纯字符串消息。
+ * 业务接口通过 get / post / patch / del 四个函数发出（见 api.ts）。
+ */
 import axios from "axios";
 
 import { getAccessToken, notifyUnauthorized } from "../lib/auth";

@@ -43,11 +43,37 @@ export function splitCsvLine(line: string): string[] {
   return out.map((s) => s.trim());
 }
 
+/** 情感列值规范化：中文/英文别名 → pos | neu | neg;无法识别返回 undefined（由后端兜底 neu） */
+const sentimentMap: Record<string, "pos" | "neu" | "neg"> = {
+  pos: "pos",
+  positive: "pos",
+  正面: "pos",
+  好评: "pos",
+  积极: "pos",
+  满意: "pos",
+  neu: "neu",
+  neutral: "neu",
+  中性: "neu",
+  一般: "neu",
+  中评: "neu",
+  neg: "neg",
+  negative: "neg",
+  负面: "neg",
+  差评: "neg",
+  消极: "neg",
+  不满意: "neg",
+};
+function normalizeSentiment(raw: string): "pos" | "neu" | "neg" | undefined {
+  const v = raw.trim().toLowerCase();
+  return sentimentMap[v] ?? sentimentMap[raw.trim()];
+}
+
 /** 简单 CSV 解析：首行表头，支持中文/英文列名，引号包裹字段 */
 export function parseCsv(text: string): CsvRow[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) return [];
-  const header = splitCsvLine(lines[0]).map((h) => h.replace(/^"|"$/g, ""));
+  // 去 UTF-8 BOM（Excel 导出的 CSV 首列可能带 \uFEFF）,再剥引号
+  const header = splitCsvLine(lines[0]).map((h) => h.replace(/^\uFEFF/, "").replace(/^"|"$/g, ""));
   const findCol = (names: string[]) => {
     const idx = header.findIndex((h) => names.includes(h.toLowerCase()));
     return idx >= 0 ? idx : -1;
@@ -65,7 +91,10 @@ export function parseCsv(text: string): CsvRow[] {
     const row: CsvRow = { content };
     if (colAuthor >= 0) row.author = cells[colAuthor];
     if (colPlatform >= 0) row.platform = cells[colPlatform];
-    if (colSentiment >= 0) row.sentiment = cells[colSentiment];
+    if (colSentiment >= 0) {
+      const sent = normalizeSentiment(cells[colSentiment] ?? "");
+      if (sent) row.sentiment = sent;
+    }
     rows.push(row);
   }
   return rows;

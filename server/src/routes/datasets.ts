@@ -1,3 +1,12 @@
+/**
+ * 📘 routes/datasets.ts —— 数据集路由（业务核心之一）
+ *
+ * POST /api/datasets 一个接口三种创建方式（body 里给什么就建什么）：
+ * - { scenarioId }     → 内置场景：scenarioService 按剧本生成预标注评论；
+ * - { comments[] }     → 粘贴/CSV 导入：dedupKeyOf 数组内去重 → normalizeComment → bulkCreate；
+ * - { feedUrl }        → 定时抓取数据集：只建壳，feedRunning=false（手动启动，见 feeds.ts）。
+ * 其它：列表（带统计）/ 删除（级联清理）/ 导出。
+ */
 import { Router } from "express";
 import { ALLOW_PRIVATE_FEED_URL } from "../config.js";
 import { DatasetModel, CommentModel, AnalysisJobModel, AlertModel, AlertRuleModel } from "../models.js";

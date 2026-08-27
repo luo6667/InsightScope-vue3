@@ -1,3 +1,14 @@
+/**
+ * 📘 routes/analysis.ts —— AI 批量分析（技术栈：axios 调 OpenAI 兼容接口 + 内存任务队列）
+ *
+ * 流程：
+ * 1. 前端把 API key / baseUrl / model 随请求发来，key 只存内存 Map（jobConfigs），不落库；
+ * 2. 创建 AnalysisJob 任务 → 后台循环：每批 8 条评论一次请求（BATCH=8 降请求数）
+ *    → 解析 AI 返回的 JSON → 写回评论的 sentiment/topics/keywords；
+ * 3. 并发限流、暂停/恢复/取消（pauseFlags / cancelFlags / runningJobs 内存标记）；
+ * 4. 进度通过 socket 推 analysis:progress，前端用 useAnalysisJob 轮询任务状态。
+ * baseUrl 同样做 SSRF 校验（只允许公网地址）。
+ */
 import { Router } from "express";
 import axios from "axios";
 import { Op } from "sequelize";

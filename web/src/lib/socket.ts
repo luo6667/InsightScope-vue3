@@ -1,3 +1,12 @@
+/**
+ * 📘 lib/socket.ts —— socket.io 客户端单例（技术栈：socket.io-client）
+ *
+ * 模块级缓存一个 Socket 实例（getSocket() 懒创建），全局只连一条连接：
+ * - 地址默认直连后端 5176（开发）；生产同源时设 NEXT_PUBLIC_SOCKET_URL="" 走 nginx；
+ * - 握手 auth.token 携带访问口令；connect_error=unauthorized → 通知全局弹口令框；
+ * - refreshSocketAuth()：口令变化时更新凭据并重连。
+ * 为什么直连后端？Next rewrites 不支持 WebSocket，/socket.io 必须由 nginx 反代或直连。
+ */
 import { io, type Socket } from "socket.io-client";
 
 import { getAccessToken, notifyUnauthorized } from "./auth";

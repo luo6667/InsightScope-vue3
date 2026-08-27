@@ -1,3 +1,15 @@
+/**
+ * 📘 db.ts —— MySQL 连接与建库（技术栈：mysql2 原生驱动 + Sequelize ORM）
+ *
+ * 三层结构，按顺序理解：
+ * 1. ensureDatabase()：先用原生 mysql2 连一次 MySQL（不指定库名），
+ *    CREATE DATABASE IF NOT EXISTS 确保数据库存在（utf8mb4 支持中文/emoji）；
+ * 2. sequelize = new Sequelize(...)：ORM 连接句柄——指定库名/账号/密码，
+ *    timezone:+00:00 统一按 UTC 存取（与原 MongoDB 行为一致）；
+ * 3. initDb()：authenticate() 验证连通 → sync() 按 models.ts 定义自动建表 →
+ *    补一个幂等唯一索引（评论去重的 DB 层兜底）。
+ * 之后所有数据库操作（models.ts 的模型查询）都经由这个 sequelize 实例。
+ */
 import mysql from "mysql2/promise";
 import { Sequelize } from "sequelize";
 

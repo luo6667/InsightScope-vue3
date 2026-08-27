@@ -1,3 +1,12 @@
+/**
+ * 📘 app/api/ai/route.ts —— Next.js Route Handler（App Router 里的“后端端点”）
+ *
+ * 解决“浏览器不能直接调 OpenAI/DeepSeek”的 CORS 问题，链路：
+ * 浏览器 → POST /api/ai（本文件）→ 服务端转发到 AI 兼容接口 → SSE 流式透传回浏览器。
+ * - apiKey 由前端随请求体传来，仅本次请求内存使用，不落库、不打印；
+ * - zod 校验请求体；客户端断开（AbortSignal）时同步中止上游请求，避免泄漏连接。
+ * 这就是 Next.js 自带“后端能力”的示例：route.ts 即 API 端点，可跑 Node 代码。
+ */
 import { z } from 'zod';
 
 export const runtime = 'nodejs';

@@ -1,3 +1,12 @@
+/**
+ * 📘 utils/commentUtils.ts —— 评论“规范化 + 去重”的公共逻辑（导入 / 定时抓取共用）
+ *
+ * - normalizeComment()：把外部评论（字段名五花八门）统一成入库结构：
+ *   content 兼容 text/comment 别名、缺省作者填“匿名用户”、非法情感回退 neu 等；
+ * - buildDedupFilter() / dedupKeyOf()：去重规则——
+ *   数据源给了 id 按 id 去重；否则按评论“显式携带的全部字段”（内容/作者/平台/时间/情感…）
+ *   完全重合才算重复，任一字段不同或字段集不同都保留（同一作者不同时间的评论不丢）。
+ */
 import type { Sentiment } from "../types.js";
 
 /** 外部传入的原始评论（数据源 / 导入数组的一项） */

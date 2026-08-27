@@ -1,3 +1,10 @@
+/**
+ * 📘 api/api.ts —— 业务 API 函数（对后端每个 REST 接口，一接口一函数）
+ *
+ * 页面 / hooks 不直接碰 axios，只 import 这里具名导出的函数（如 listDatasets()）。
+ * 好处：后端接口地址或参数变了只改这一处；返回类型从 api/types.ts 对齐。
+ * 按业务分块：数据集 / 定时抓取 / 评论与统计 / 导出 / 场景 / 分析任务 / 模拟器 / 告警。
+ */
 import { del, get, patch,post } from "./client";
 import type { Alert, AlertRule, AnalysisJob, CommentRow, DatasetInfo, DatasetStats, ScenarioInfo } from "./types";
 

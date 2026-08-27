@@ -1,3 +1,15 @@
+/**
+ * 📘 routes/feeds.ts —— 定时抓取（feedUrl → 拉取评论入库） + 内置演示数据源
+ *
+ * 核心 doFetchFeed()：
+ * 1. 取数据集的 feedUrl：绝对 URL 走 SSRF 校验（可放行私网，见 config.ALLOW_PRIVATE_FEED_URL）；
+ * 2. fetch 数据源（15s 超时）→ 解析 JSON 数组或 { comments: [] }；
+ * 3. 逐条去重（commentUtils.buildDedupFilter：评论显式携带的字段全部重合才算重复）
+ *    → normalizeComment 规范化 → 入库 → socket 推 comment:stream；
+ * 4. 记录 feedLastCount / feedLastError 供前端展示。
+ * 手动启动模式：startFeed() 由「启动」按钮触发并定时循环；server 重启不自动恢复。
+ * 文件底部还内置了 /api/demo/feed 演示数据源（14 条固定评论池，字段稳定可去重）。
+ */
 import { Router, type RequestHandler } from "express";
 import { ALLOW_PRIVATE_FEED_URL } from "../config.js";
 import { CommentModel, DatasetModel } from "../models.js";

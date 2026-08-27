@@ -1,3 +1,12 @@
+/**
+ * 📘 lib/ai.ts —— AI 流式对话（SSE 打字机效果）
+ *
+ * 请求 Next 的 /api/ai（route handler 转发到 AI 服务），响应是 text/event-stream：
+ * - 用 ReadableStream 的 reader 逐块读，按 \n 切行，解析以 data: 开头的行里的 JSON；
+ * - 每次取 delta 增量内容回调 onDelta()，前端逐字追加，形成打字机效果；
+ * - 处理了：多 data 块跨 chunk 拼接、[DONE] 结束标记、AbortSignal 中止、
+ *   附加访问口令（proxy 启用时 /api/* 需要 Bearer）。
+ */
 import type { AiConfig } from "../store/settings";
 import { getAccessToken } from "./auth";
 

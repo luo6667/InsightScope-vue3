@@ -1,3 +1,13 @@
+/**
+ * 📘 routes/simulate.ts —— 实时模拟器（把已有评论按时间轴重放，制造“活”数据）
+ *
+ * 原理：tick() 循环——按 timestamp 升序一条条把评论通过 socket 的 comment:stream
+ * 事件推给前端，推送间隔 = max(30, 1000/speed)ms（speed 1~20，20 倍速约 20 条/秒）。
+ * 每条流入后 checkAlerts()：负面率 Z-score 异常 + 规则阈值 + 敏感关键词 →
+ * 生成告警（带 60s 冷却）并推 alert:new。
+ * 关键点：内存 Map sims 记录每个数据集的播放进度；stop/restart 时用对象引用
+ * 比对丢弃旧链路，防止并发竞态（旧 tick 不再继续）。
+ */
 import { Router } from "express";
 import { Op } from "sequelize";
 import { AlertModel, AlertRuleModel, CommentModel } from "../models.js";

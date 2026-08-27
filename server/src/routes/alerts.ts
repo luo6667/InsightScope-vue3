@@ -1,3 +1,11 @@
+/**
+ * 📘 routes/alerts.ts —— 告警规则 CRUD + 告警记录 + 人工确认
+ *
+ * - /rules：负面率阈值 / 评论量 / 敏感关键词 三种规则的增删改查（zod 校验，keyword 规则必填关键词）；
+ * - /：告警记录列表（分页、可查未确认）；
+ * - /:id/ack：人工“确认”告警（确认后前端不再高亮）。
+ * 规则触发检测在 simulate.ts 的 checkAlerts 里（实时模拟时执行）。
+ */
 import { Router } from "express";
 import { AlertModel, AlertRuleModel } from "../models.js";
 import {

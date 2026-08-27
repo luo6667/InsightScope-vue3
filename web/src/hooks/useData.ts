@@ -1,3 +1,14 @@
+/**
+ * 📘 hooks/useData.ts —— 数据请求 Hooks（技术栈：TanStack Query）
+ *
+ * 把“请求后端 + 缓存 + 轮询 + 重试”封装成一个一个 hook，页面里调用即得
+ * { data, isLoading, refetch }，数据变了自动重渲染：
+ * - useDatasets()：数据集列表，可传轮询间隔（feed 数据集 8s 刷新）；
+ * - useDatasetStats()：统计（queryKey 含 params 序列化，参数变自动重新请求）；
+ * - useAnalysisJob()：分析任务，running/paused 时每 3s 轮询；
+ * - useAlerts()：告警列表，每 5s 轮询。
+ * queryKey 是缓存标识：同样的 key 复用同一份数据，invalidateQueries 可让它失效重拉。
+ */
 import { useQuery } from "@tanstack/react-query";
 
 import {

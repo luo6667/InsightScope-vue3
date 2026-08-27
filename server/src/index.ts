@@ -1,3 +1,16 @@
+/**
+ * 📘 index.ts —— 后端入口（技术栈：Express 5 + socket.io + helmet + cors + express-rate-limit）
+ *
+ * 程序启动后做的事，按顺序读：
+ * 1. 中间件链：helmet(安全响应头) → cors(跨域白名单) → express.json(解析请求体)
+ *    → rateLimit(写接口限流) → requireAccessToken(访问口令鉴权，未配置则放行)；
+ * 2. 注册业务路由：datasets / comments / alerts / analysis / simulate / feeds
+ *    （前缀 /api，另挂 /api/demo/feed 演示数据源）；
+ * 3. socket.io 与 HTTP 共用一个 server：浏览器直连 /socket.io，握手校验 ACCESS_TOKEN；
+ * 4. main()：连 MySQL → 建表 → 监听端口。
+ * 数据流：浏览器(前端) → /api 代理(开发 rewrites / 生产 nginx) → 这里的路由 → Sequelize → MySQL；
+ * 实时推送反向：MySQL → 路由 → io.emit → socket → 前端页面。
+ */
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";

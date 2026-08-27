@@ -1,3 +1,11 @@
+/**
+ * 📘 routes/comments.ts —— 评论查询 / 统计 / 手动修正
+ *
+ * 这是 Sequelize 复杂查询的“教学窗口”：
+ * - 列表：分页 + 时间范围 + 情感过滤 + 主题过滤(JSON_CONTAINS) + 关键词搜索(LIKE 转义)；
+ * - 统计 /stats：情感分组计数、按天趋势、主题与关键词词频（textService 提取）；
+ * - 修正 PATCH：人工改情感/主题（前端弹窗保存）。
+ */
 import { Router } from "express";
 import { Op } from "sequelize";
 import { sequelize } from "../db.js";
