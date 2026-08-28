@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "@fontsource-variable/outfit";
 
+/* dark: 变体跟随应用的 data-theme（默认是 prefers-color-scheme，与项目主题机制不同步） */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
   --font-sans: "Outfit Variable", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 

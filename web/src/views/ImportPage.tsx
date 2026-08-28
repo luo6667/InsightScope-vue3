@@ -1,10 +1,11 @@
 ﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ClipboardPaste, Clock, FileDown, FileSpreadsheet, FileUp, MessagesSquare, Radio, UploadCloud } from "lucide-react";
+import { ArrowRight, ClipboardPaste, Clock, FileDown, FileSpreadsheet, FileUp, Info, MessagesSquare, Radio, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { createFeedDataset, createScenarioDataset, importComments, listScenarios } from "../api/api";
 import type { ScenarioInfo } from "../api/types";
+import ImportFieldsModal from "../components/ImportFieldsModal";
 import { Button, Card, Field, Input, PageHeader, Textarea } from "../components/ui";
 import { useImportForm } from "../hooks/useImportForm";
 import { type CsvRow,downloadCsvTemplate, parseCsv } from "../lib/csv";
@@ -14,6 +15,7 @@ export default function ImportPage() {
   const qc = useQueryClient();
   const router = useRouter();
   const { data: scenarios } = useQuery({ queryKey: ["scenarios"], queryFn: listScenarios });
+  const [showFields, setShowFields] = useState(false);
 
   const create = useMutation({
     mutationFn: (scenarioId: string) => createScenarioDataset(scenarioId),
@@ -25,7 +27,16 @@ export default function ImportPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
-      <PageHeader title="导入数据" desc="内置舆情场景已预标注（免 key 演示），或粘贴 / CSV / URL 定时抓取导入" />
+      <PageHeader
+        title="导入数据"
+        desc="内置舆情场景已预标注（免 key 演示），或粘贴 / CSV / URL 定时抓取导入"
+        extra={
+          <Button variant="outline" size="sm" onClick={() => setShowFields(true)}>
+            <Info size={14} />
+            导入字段说明
+          </Button>
+        }
+      />
 
       <h2 className="mt-8 flex items-center gap-2 text-sm font-medium text-ink-200">
         <FileUp size={15} className="text-accent-400" />
@@ -66,6 +77,8 @@ export default function ImportPage() {
       <div className="mt-3">
         <FeedImport onCreate={(name, url, interval) => createFeedDataset(name, url, interval)} onDone={(id) => router.push(`/dashboard?dataset=${id}`)} />
       </div>
+
+      <ImportFieldsModal open={showFields} onClose={() => setShowFields(false)} />
     </div>
   );
 }
@@ -75,11 +88,11 @@ function ScenarioCard({ s, featured, busy, onClick }: { s: ScenarioInfo; feature
     <button
       onClick={onClick}
       disabled={busy}
-      className={`group text-left transition-all duration-150 disabled:opacity-50 ${
+      className={`group h-full text-left transition-all duration-150 disabled:opacity-50 ${
         featured ? "lg:col-span-2" : ""
       }`}
     >
-      <Card hover className={`flex items-start gap-4 p-5 ${featured ? "lg:flex-row lg:items-center" : ""}`}>
+      <Card hover className={`flex h-full items-start gap-4 p-5 ${featured ? "lg:flex-row lg:items-center" : ""}`}>
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-accent-400 transition-colors group-hover:bg-accent-500/15">
           <MessagesSquare size={20} strokeWidth={1.8} />
         </span>
@@ -315,7 +328,6 @@ function FeedImport({
         <Button size="sm" variant="ghost" onClick={() => setUrl("https://jsonplaceholder.typicode.com/comments")}>
           JSONPlaceholder 公开 API
         </Button>
-        <span className="text-ink-400">先演示用「本地演示数据源」，无需联网</span>
       </div>
       {form.error && <div className="mt-2 text-xs text-red-400">{form.error}</div>}
       <div className="mt-4">

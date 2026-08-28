@@ -123,7 +123,7 @@ export default function AnalysisPage() {
           </div>
 
           {!settings.apiKey && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-800/50 bg-amber-950/25 px-3.5 py-2.5 text-xs text-amber-300">
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-600/50 bg-amber-100 px-3.5 py-2.5 text-xs text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/25 dark:text-amber-300">
               <AlertTriangle size={14} className="shrink-0" />
               尚未配置 API key（内置场景已预标注，无需分析）。到「设置」填入后即可分析导入的数据。
             </div>
@@ -161,7 +161,7 @@ export default function AnalysisPage() {
           )}
 
           {job?.status === "done" && (
-            <div className="mt-4 rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-300">
+            <div className="mt-4 rounded-lg border border-emerald-600/50 bg-emerald-100 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-950/20 dark:text-emerald-300">
               分析完成，去「监控台」查看情感分布 / 主题 / 趋势图表
             </div>
           )}
