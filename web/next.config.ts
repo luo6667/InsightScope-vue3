@@ -16,6 +16,7 @@ const API_TARGET = process.env.API_TARGET ?? 'http://localhost:5176';
 const nextConfig: NextConfig = {
   // React Compiler：编译期自动记忆化，组件里无需手写 useMemo / useCallback / memo（Next 16 顶层配置）
   reactCompiler: true,
+  devIndicators: false,
   async rewrites() {
     // 开发模式：Next 直接代理 /api 到 Express（socket.io 不走这里——rewrites 不支持 WebSocket，
     // 由前端 socket.io-client 直连 Express，见 src/lib/socket.ts）。
