@@ -3,5 +3,5 @@
  * 替代各页面重复的 `e instanceof Error ? e.message : String(e)`。
  */
 export function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return e instanceof Error ? e.message : String(e)
 }

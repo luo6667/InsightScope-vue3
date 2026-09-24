@@ -1,0 +1,51 @@
+/**
+ * 📘 element-overrides.css —— Element Plus 主题对齐
+ *
+ * 决策①B：EP 只用于复杂交互组件（弹窗 / Select / Pagination / DatePicker / Tooltip / Message），
+ * 但视觉必须与项目自研的 ink/accent 体系一致，所以把 EP 的 CSS 变量重映射到我们的运行时变量上。
+ *
+ * 用 html:root 而不是 :root 是为了提高优先级：EP 的 base.css 也在 :root 定义同名变量，
+ * 按需引入时样式注入顺序不确定，提高一级优先级可以保证本文件永远生效。
+ */
+html:root {
+  /* 主色 = accent 琥珀 */
+  --el-color-primary: var(--accent-500);
+  --el-color-primary-light-3: var(--accent-400);
+  --el-color-primary-light-5: var(--accent-400);
+  --el-color-primary-light-7: color-mix(in srgb, var(--accent-500) 30%, var(--ink-900));
+  --el-color-primary-light-8: color-mix(in srgb, var(--accent-500) 20%, var(--ink-900));
+  --el-color-primary-light-9: color-mix(in srgb, var(--accent-500) 12%, var(--ink-900));
+  --el-color-primary-dark-2: var(--accent-600);
+
+  /* 背景 / 浮层 */
+  --el-bg-color: var(--ink-900);
+  --el-bg-color-page: var(--ink-950);
+  --el-bg-color-overlay: var(--ink-850);
+  --el-mask-color: color-mix(in srgb, var(--ink-950) 70%, transparent);
+
+  /* 文字 */
+  --el-text-color-primary: var(--ink-100);
+  --el-text-color-regular: var(--ink-300);
+  --el-text-color-secondary: var(--ink-400);
+  --el-text-color-placeholder: var(--ink-500);
+  --el-text-color-disabled: var(--ink-600);
+
+  /* 边框 / 填充 */
+  --el-border-color: var(--ink-700);
+  --el-border-color-light: var(--ink-800);
+  --el-border-color-lighter: var(--ink-800);
+  --el-border-color-extra-light: var(--ink-800);
+  --el-border-color-dark: var(--ink-600);
+  /* el-select / el-input 的底色与内容区底色：对齐自研 Select 的 bg-ink-950 */
+  --el-fill-color-blank: var(--ink-950);
+  --el-fill-color: var(--ink-850);
+  --el-fill-color-light: var(--ink-850);
+  --el-fill-color-lighter: var(--ink-900);
+
+  /* 字体 / 尺寸 / 圆角 / 阴影 */
+  --el-font-family: var(--font-sans);
+  /* EP 默认控件高 32px，自研 Select 是 h-9（36px），对齐之 */
+  --el-component-size: 2.25rem;
+  --el-border-radius-base: 0.5rem;
+  --el-box-shadow-light: 0 20px 44px -12px rgb(0 0 0 / 0.35);
+}

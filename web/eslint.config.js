@@ -1,27 +1,28 @@
 import js from '@eslint/js';
-import nextVitals from 'eslint-config-next/core-web-vitals';
-import tseslint from 'typescript-eslint';
-import react from 'eslint-plugin-react';
-import reactCompiler from 'eslint-plugin-react-compiler';
-import reactHooks from 'eslint-plugin-react-hooks';
-import reactRefresh from 'eslint-plugin-react-refresh';
-import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import prettier from 'eslint-config-prettier';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
+import pluginVue from 'eslint-plugin-vue';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
+import vueParser from 'vue-eslint-parser';
 
+/**
+ * 📘 eslint.config.js —— ESLint 9 flat config（Vue 版）
+ *
+ * 对应关系：eslint-config-next + react-* 插件 → eslint-plugin-vue。
+ * unplugin 生成的 dts 与构建产物不参与 lint。
+ */
 export default tseslint.config(
-  // Next.js 官方规则（Babel parser + 规则；parser 会被后面的 TS 块覆盖）
-  ...nextVitals,
-
-  // 全局忽略
-  { ignores: ['.next', 'dist', 'node_modules'] },
+  {
+    ignores: ['dist', 'node_modules', 'src/types/auto-imports.d.ts', 'src/types/components.d.ts'],
+  },
 
   // 基础 JS/TS 规则
   // 注意：用 recommended（非 strictTypeChecked）——既有代码含 axios any / void promise 等写法，
   // 类型感知严格规则会产生大量噪声；需要更严时可改回 tseslint.configs.strictTypeChecked
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['**/*.{ts,tsx}'],
+    files: ['**/*.{ts,vue}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -31,29 +32,9 @@ export default tseslint.config(
       },
     },
     plugins: {
-      react,
-      'react-compiler': reactCompiler,
-      'react-hooks': reactHooks,
-      'react-refresh': reactRefresh,
       'simple-import-sort': simpleImportSort,
     },
-    settings: {
-      react: {
-        version: 'detect',
-      },
-    },
     rules: {
-      // React
-      ...react.configs.recommended.rules,
-      ...react.configs['jsx-runtime'].rules,
-      ...reactHooks.configs.recommended.rules,
-      // React Compiler：编译期自动记忆化，hook 规则由编译器校验（memo 等手动优化不再需要）
-      'react-compiler/react-compiler': 'error',
-      // hooks v7 新增规则：既有代码在 effect 中同步 setState 是既定模式，保持行为不变
-      'react-hooks/set-state-in-effect': 'off',
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      'react/no-unknown-property': ['error', { ignore: ['className'] }],
-
       // Import 排序
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',
@@ -67,19 +48,45 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      // React 19 + TS 中 prop-types 不再需要
-      'react/prop-types': 'off',
       // 允许不显式声明返回类型（TS 推导足够好）
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
     },
   },
 
-  // Next.js App Router 文件（layout/page 可导出 metadata 等非组件符号，无需 fast refresh）
+  // Vue SFC（eslint-plugin-vue 的 flat 预设 + TS parser）
+  ...pluginVue.configs['flat/recommended'],
   {
-    files: ['src/app/**/*.{ts,tsx}'],
+    files: ['**/*.vue'],
+    languageOptions: {
+      parser: vueParser,
+      parserOptions: {
+        parser: tseslint.parser,
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        extraFileExtensions: ['.vue'],
+      },
+    },
     rules: {
-      'react-refresh/only-export-components': 'off',
+      // 组件名不强制多词（App.vue / Toaster 等）
+      'vue/multi-word-component-names': 'off',
+      // props 默认值用 withDefaults 表达，不必强制 require-default-prop
+      'vue/require-default-prop': 'off',
+      // 视图较长，单文件多根/属性换行交给 prettier 决定
+      'vue/max-attributes-per-line': 'off',
+      'vue/singleline-html-element-content-newline': 'off',
+      'vue/html-self-closing': [
+        'error',
+        { html: { void: 'always', normal: 'always', component: 'always' } },
+      ],
+    },
+  },
+
+  // Node 环境文件
+  {
+    files: ['vite.config.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
     },
   },
 

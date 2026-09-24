@@ -12,14 +12,14 @@
  * 实时推送反向：MySQL → 路由 → io.emit → socket → 前端页面。
  */
 import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import { rateLimit } from "express-rate-limit";
-import { ZodError } from "zod";
-import { createServer } from "node:http";
-import { Server } from "socket.io";
-import { initDb, sequelize, dbUriSummary } from "./db.js";
-import { HttpError } from "./utils/httpUtils.js";
+import cors from "cors";//跨域处理
+import helmet from "helmet";//安全响应头
+import { rateLimit } from "express-rate-limit";//写接口限流
+import { ZodError } from "zod";//参数校验错误
+import { createServer } from "node:http";//创建 HTTP 服务器
+import { Server } from "socket.io";//socket.io 服务器 WebSocket库
+import { initDb, sequelize, dbUriSummary } from "./db.js";//数据库连接
+import { HttpError } from "./utils/httpUtils.js";//自定义错误类
 import {
   PORT,
   CORS_ORIGINS,
@@ -27,16 +27,17 @@ import {
   ENABLE_MOCK_AI,
   authRequired as ACCESS_REQUIRED,
   assertProductionConfig,
-} from "./config.js";
-import { requireAccessToken, socketAuthGuard } from "./utils/auth.js";
+} from "./config.js";//配置文件
+import { requireAccessToken, socketAuthGuard } from "./utils/auth.js";//认证中间件
 import datasetsRouter from "./routes/datasets.js";
 import commentsRouter from "./routes/comments.js";
 import alertsRouter from "./routes/alerts.js";
 import analysisRouter from "./routes/analysis.js";
 import simulateRouter from "./routes/simulate.js";
 import feedsRouter, { demoFeedHandler } from "./routes/feeds.js";
-import { DatasetModel } from "./models.js";
-import { listScenarios } from "./services/scenarioService.js";
+import aiRouter from "./routes/ai.js";
+import { DatasetModel } from "./models.js";//数据集模型
+import { listScenarios } from "./services/scenarioService.js";//场景服务
 
 // 生产强校验：密钥/CORS/限流/Mock AI/访问口令未配置则拒绝启动（开发模式跳过）
 assertProductionConfig();
@@ -61,7 +62,7 @@ if (ENABLE_MOCK_AI) {
   console.warn("[config] Mock AI 端点已开启（仅测试用，生产请保持关闭）");
 }
 
-// 进程级兜底：异步异常/未捕获异常只记日志，不崩进程
+// 进程级兜底：异步异常/未捕获异常只记日志，不崩进程，保证服务持续运行
 process.on("unhandledRejection", (reason) => {
   console.error("[process] unhandledRejection:", reason instanceof Error ? reason.stack ?? reason.message : reason);
 });
@@ -93,7 +94,7 @@ app.use(express.json({ limit: "10mb" }));
 // 健康检查（公开）：容器编排 / 负载均衡探活用；DB 不可用返回 503
 app.get("/healthz", async (_req, res) => {
   try {
-    await sequelize.authenticate();
+    await sequelize.authenticate();//验证数据库连接
     res.json({ ok: true, db: "up" });
   } catch {
     res.status(503).json({ ok: false, db: "down" });
@@ -143,13 +144,13 @@ io.on("connection", (socket) => {
     try {
       const ok = await DatasetModel.findByPk(datasetId);
       if (!ok) return socket.emit("join-error", { datasetId, error: "数据集不存在" });
-      socket.join(`dataset:${datasetId}`);
+      socket.join(`dataset:${datasetId}`);//加入数据集房间
     } catch {
       socket.emit("join-error", { datasetId, error: "无效的数据集 id" });
     }
   });
   socket.on("leave-dataset", (datasetId: string) => {
-    socket.leave(`dataset:${datasetId}`);
+    socket.leave(`dataset:${datasetId}`);//离开数据集房间
   });
 });
 
@@ -162,6 +163,9 @@ app.use("/api/datasets", analysisRouter);
 app.use("/api/datasets", simulateRouter);
 app.use("/api/datasets", feedsRouter);
 app.use("/api/alerts", alertsRouter);
+
+// AI 流式对话转发（原 Next.js POST /api/ai 搬迁至此，路径与请求/响应格式不变）
+app.use("/api/ai", aiRouter);
 
 // 本地演示数据源（供 URL 定时抓取演示）
 app.get("/api/demo/feed", demoFeedHandler);
@@ -219,11 +223,11 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 async function main() {
   try {
-    await initDb();
+    await initDb();// 连 MySQL + 建表
     console.log(`[mysql] connected: ${dbUriSummary()}`);
   } catch (e) {
     console.error("[mysql] 连接失败（需本机 MySQL 运行，默认 root:1234@127.0.0.1:3306/plfx）", e);
-    process.exit(1);
+    process.exit(1);// 数据库连不上直接退出
   }
 
   // 运行期连接事件监听：断连/重连有日志，DB 抖动不静默

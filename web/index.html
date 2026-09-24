@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>舆情雷达 InsightScope</title>
+    <meta name="description" content="AI 用户评论分析与舆情监控平台" />
+    <!--
+      主题初始化：在 CSS / 应用脚本执行前设置 data-theme，避免首帧浅/深色闪烁（FOUC）。
+      对应 Next 时期 app/layout.tsx 里 <Script strategy="beforeInteractive"> 的那段内联脚本。
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem('insight-theme');
+        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

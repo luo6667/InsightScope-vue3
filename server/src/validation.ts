@@ -176,6 +176,21 @@ export const speedBodySchema = z.object({
   speed: z.coerce.number().min(1).max(20).default(5),
 });
 
+/**
+ * AI 流式对话转发（POST /api/ai）：与原 Next.js route handler 的 chatSchema 保持同一口径，
+ * 前端 lib/ai.ts 的 streamChat 按此字段发送（apiKey 仅本次请求内存使用，不落库、不打印）。
+ */
+export const aiChatBodySchema = z.object({
+  baseUrl: z.string().trim().min(1).max(2048),
+  apiKey: z.string().trim().min(1).max(1024),
+  model: z.string().trim().min(1).max(128),
+  messages: z
+    .array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string() }))
+    .min(1)
+    .max(50),
+  temperature: z.number().min(0).max(2).optional(),
+});
+
 // ============ validate 中间件 ============
 
 interface ValidateSchemas {

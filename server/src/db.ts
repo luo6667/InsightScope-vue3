@@ -48,7 +48,7 @@ export const sequelize = new Sequelize(DB_CONFIG.database, DB_CONFIG.user, DB_CO
   host: DB_CONFIG.host,
   port: DB_CONFIG.port,
   dialect: "mysql",
-  timezone: "+00:00", // 统一 UTC 存储（与原先 MongoDB 行为一致）
+  timezone: "+00:00", // 统一 UTC 存储
   logging: false,
   define: {
     charset: "utf8mb4",
@@ -74,10 +74,12 @@ async function ensureCommentDedupIndex(): Promise<void> {
     ALTER TABLE comments
       ADD COLUMN source_key VARCHAR(191) GENERATED ALWAYS AS (IF(sourceId = '', NULL, sourceId)) STORED,
       ADD UNIQUE INDEX uniq_dataset_source (datasetId, source_key)
-  `);
-}
+  `);//因为sourceId里面导入数据可能有空字符串会导致冲突，所以设一个source_key列，空字符串时生成NULL，非空时取sourceId，唯一索引是datasetId+source_key
+}//datasetId为数据集id，source_key为评论id，唯一索引是datasetId+source_key，source_key为空时，唯一索引是datasetId+NULL
+//这个数据集id怎么创建的？在导入数据时，创建数据集时，会自动生成一个随机字符串作为数据集id
+//他是怎么生成的？答案：是用 uuid 函数生成的，返回一个 36进制字符串，长度为32，包含字母和数字
 
-/** 连接 MySQL + 建库建表 + 索引（应用启动时调用一次） */
+//连接 MySQL + 建库建表 + 索引（应用启动时调用一次） */
 export async function initDb(): Promise<void> {
   await ensureDatabase();
   await sequelize.authenticate();
