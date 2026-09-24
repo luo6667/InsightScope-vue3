@@ -7,18 +7,20 @@
  *
  * 只需跑一次（迁移后值已是裸对象，再跑不会被二次处理）；在 main.ts 里 app.use(pinia) 之前调用。
  */
+import { readStorage, writeStorage } from '@/lib/storage'
+
 const LEGACY_KEYS = ['insight-workspace', 'insight-ai-settings']
 
 export function migrateLegacyStorage(): void {
   for (const key of LEGACY_KEYS) {
+    const raw = readStorage(key)
+    if (!raw) continue
     try {
-      const raw = localStorage.getItem(key)
-      if (!raw) continue
       const parsed: unknown = JSON.parse(raw)
       if (parsed && typeof parsed === 'object' && 'state' in parsed) {
         const inner = (parsed as { state?: unknown }).state
         if (inner && typeof inner === 'object') {
-          localStorage.setItem(key, JSON.stringify(inner))
+          writeStorage(key, JSON.stringify(inner))
         }
       }
     } catch {

@@ -32,13 +32,13 @@ defineProps<{ stats?: DatasetStats; current?: DatasetInfo }>()
       label="正面占比"
       :value="pct(stats, 'pos')"
       :sub="`${stats.sentiment.pos} 条`"
-      accent-cls="text-emerald-400"
+      accent-cls="text-emerald-600 dark:text-emerald-400"
     />
     <StatCard
       label="负面占比"
       :value="pct(stats, 'neg')"
       :sub="`${stats.sentiment.neg} 条`"
-      accent-cls="text-red-400"
+      accent-cls="text-red-600 dark:text-red-400"
     />
   </div>
 </template>

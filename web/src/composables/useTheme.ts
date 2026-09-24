@@ -1,5 +1,7 @@
 import { ref, watch } from 'vue'
 
+import { readStorage, writeStorage } from '@/lib/storage'
+
 /**
  * 📘 composables/useTheme.ts —— 取代旧 hooks/useTheme.ts
  *
@@ -12,11 +14,8 @@ export type Theme = 'dark' | 'light'
 const KEY = 'insight-theme'
 
 function readStored(): Theme {
-  try {
-    return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark'
-  } catch {
-    return 'dark'
-  }
+  // 读不到（首次访问 / storage 不可用）一律按深色，与 index.html 的防 FOUC 脚本一致
+  return readStorage(KEY) === 'light' ? 'light' : 'dark'
 }
 
 // 模块加载即先行设置 data-theme，避免首帧浅/深色闪烁（FOUC）；
@@ -26,11 +25,7 @@ document.documentElement.dataset.theme = theme.value
 
 watch(theme, (value) => {
   document.documentElement.dataset.theme = value
-  try {
-    localStorage.setItem(KEY, value)
-  } catch {
-    /* ignore */
-  }
+  writeStorage(KEY, value)
 })
 
 export function useTheme(): { theme: typeof theme; toggleTheme: () => void } {

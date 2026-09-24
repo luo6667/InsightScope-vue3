@@ -7,7 +7,7 @@
  * data/isLoading/error 变成 ref（模板自动解包）；useMutation 语义不变（mutate）；
  * 两处原生 title 提示气泡改为 Element Plus 的 <el-tooltip>，其余文案与 Tailwind 逐字保留。
  */
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
+import { useMutation } from '@tanstack/vue-query'
 import {
   AlertTriangle,
   ArrowRight,
@@ -26,6 +26,7 @@ import { deleteDataset, exportComments, pullFeedNow, startFeedPull, stopFeedPull
 import type { DatasetInfo } from '@/api/types'
 import { Badge, Button, Card, CardSkeleton, EmptyState, PageHeader } from '@/components/ui'
 import { useDatasets } from '@/composables/useData'
+import { useInvalidateDataset } from '@/composables/useInvalidateDataset'
 import { errMsg } from '@/lib/errors'
 
 const typeLabel: Record<string, string> = {
@@ -34,7 +35,7 @@ const typeLabel: Record<string, string> = {
   feed: '定时抓取',
 }
 
-const qc = useQueryClient()
+const invalidate = useInvalidateDataset()
 const { data: datasets, isLoading, error } = useDatasets(8000)
 const actionError = ref<string | null>(null)
 
@@ -43,7 +44,7 @@ const queryError = computed(() => (error.value ? errMsg(error.value) : ''))
 const del = useMutation({
   mutationFn: deleteDataset,
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ['datasets'] })
+    invalidate.datasets()
     toast.success('数据集已删除')
   },
   onError: (e) => {
@@ -52,14 +53,14 @@ const del = useMutation({
 })
 const feedStart = useMutation({
   mutationFn: startFeedPull,
-  onSuccess: () => qc.invalidateQueries({ queryKey: ['datasets'] }),
+  onSuccess: () => invalidate.datasets(),
   onError: (e) => {
     actionError.value = `启动抓取失败：${errMsg(e)}`
   },
 })
 const feedStop = useMutation({
   mutationFn: stopFeedPull,
-  onSuccess: () => qc.invalidateQueries({ queryKey: ['datasets'] }),
+  onSuccess: () => invalidate.datasets(),
   onError: (e) => {
     actionError.value = `停止抓取失败：${errMsg(e)}`
   },
@@ -67,8 +68,11 @@ const feedStop = useMutation({
 const feedPull = useMutation({
   mutationFn: pullFeedNow,
   onSuccess: (r) => {
-    qc.invalidateQueries({ queryKey: ['datasets'] })
-    toast.success(`抓取完成，新增 ${r.count} 条评论`)
+    invalidate.datasets()
+    // 后端带锁：定时抓取正在跑时手动点击会被跳过（skipped），此时弹「新增 0 条」的成功提示是误导
+    if (r.skipped) toast.info('已有抓取任务正在进行，本次未重复抓取')
+    else if (r.count === 0) toast.info('抓取完成，没有新增评论')
+    else toast.success(`抓取完成，新增 ${r.count} 条评论`)
   },
   onError: (e) => {
     actionError.value = `抓取失败：${errMsg(e)}`
@@ -98,13 +102,13 @@ const confirmDelete = (d: DatasetInfo) => {
       <CardSkeleton v-if="isLoading" :rows="3" />
       <div
         v-if="error"
-        class="rounded-lg border border-red-800/60 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+        class="rounded-lg border border-red-600/40 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300"
       >
         {{ queryError }}
       </div>
       <div
         v-if="actionError"
-        class="rounded-lg border border-red-800/60 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+        class="rounded-lg border border-red-600/40 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300"
       >
         {{ actionError }}
         <button class="ml-2 underline" @click="actionError = null">关闭</button>
@@ -128,28 +132,21 @@ const confirmDelete = (d: DatasetInfo) => {
         </template>
       </EmptyState>
 
-      <Card
-        v-for="d in datasets || []"
-        :key="d.id"
-        hover
-        class="flex items-center gap-4 px-4 py-3"
-      >
+      <Card v-for="d in datasets || []" :key="d.id" hover class="flex items-center gap-4 px-4 py-3">
         <span
-          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-accent-400"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-accent-600 dark:text-accent-400"
         >
           <Database :size="16" :stroke-width="2" />
         </span>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="truncate text-sm font-medium text-ink-100">{{ d.name }}</span>
-            <Badge
-              :tone="d.type === 'builtin' ? 'accent' : d.type === 'feed' ? 'pos' : 'neutral'"
-            >
+            <Badge :tone="d.type === 'builtin' ? 'accent' : d.type === 'feed' ? 'pos' : 'neutral'">
               {{ typeLabel[d.type] }}
             </Badge>
             <span
               v-if="d.type === 'feed' && d.feedRunning"
-              class="flex items-center gap-1.5 text-xs text-emerald-400"
+              class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400"
             >
               <span class="relative flex h-2 w-2">
                 <span
@@ -171,7 +168,7 @@ const confirmDelete = (d: DatasetInfo) => {
             </template>
             <div
               v-if="d.type === 'feed' && d.feedLastError"
-              class="mt-1 flex items-center gap-1 text-xs text-red-400"
+              class="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"
             >
               <AlertTriangle :size="11" />
               抓取失败：{{ d.feedLastError }}
@@ -180,12 +177,7 @@ const confirmDelete = (d: DatasetInfo) => {
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
           <template v-if="d.type === 'feed'">
-            <Button
-              v-if="d.feedRunning"
-              size="sm"
-              variant="ghost"
-              @click="feedStop.mutate(d.id)"
-            >
+            <Button v-if="d.feedRunning" size="sm" variant="ghost" @click="feedStop.mutate(d.id)">
               <Pause :size="12" />
               停止
             </Button>
@@ -214,7 +206,7 @@ const confirmDelete = (d: DatasetInfo) => {
             <Button size="sm">分析</Button>
           </RouterLink>
           <Button size="sm" variant="ghost" @click="confirmDelete(d)">
-            <Trash2 :size="13" class="text-ink-400 hover:text-red-400" />
+            <Trash2 :size="13" class="text-ink-400 hover:text-red-600 dark:hover:text-red-400" />
           </Button>
         </div>
       </Card>

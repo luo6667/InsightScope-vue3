@@ -7,9 +7,9 @@
  * 子组件内联进本文件（避免新增文件）；数据集选择继续用 DatasetPicker，规则类型下拉改用
  * Element Plus 的 <el-select>；文案与 Tailwind class 逐字保留。
  */
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
+import { useMutation } from '@tanstack/vue-query'
 import { Bell, BellRing, Check, Plus, Trash2 } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 
 import { ackAlert, createRule, deleteRule, updateRule } from '@/api/api'
@@ -17,6 +17,7 @@ import DatasetPicker from '@/components/DatasetPicker.vue'
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader } from '@/components/ui'
 import { useCurrentDataset } from '@/composables/useCurrentDataset'
 import { useAlertRules, useAlerts, useDatasets } from '@/composables/useData'
+import { useInvalidateDataset } from '@/composables/useInvalidateDataset'
 import { errMsg } from '@/lib/errors'
 import { formatTime } from '@/lib/format'
 import { alertRuleSchema, firstError } from '@/lib/validation'
@@ -34,7 +35,7 @@ const ruleTone: Record<string, 'neg' | 'neutral' | 'accent'> = {
 }
 
 const { datasetId, setDatasetId } = useCurrentDataset()
-const qc = useQueryClient()
+const invalidate = useInvalidateDataset()
 
 const { data: datasets } = useDatasets()
 const { data: rules } = useAlertRules(datasetId)
@@ -42,15 +43,15 @@ const { data: alerts } = useAlerts(datasetId)
 
 const del = useMutation({
   mutationFn: deleteRule,
-  onSuccess: () => qc.invalidateQueries({ queryKey: ['rules', datasetId.value] }),
+  onSuccess: () => invalidate.rules(datasetId.value),
 })
 const toggle = useMutation({
   mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => updateRule(id, { enabled }),
-  onSuccess: () => qc.invalidateQueries({ queryKey: ['rules', datasetId.value] }),
+  onSuccess: () => invalidate.rules(datasetId.value),
 })
 const ack = useMutation({
   mutationFn: ackAlert,
-  onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts', datasetId.value] }),
+  onSuccess: () => invalidate.alerts(datasetId.value),
 })
 
 const unacked = computed(() => alerts.value?.filter((a) => !a.acknowledged).length ?? 0)
@@ -61,10 +62,20 @@ const threshold = ref('50')
 const keyword = ref('')
 const formError = ref<string | null>(null)
 
+// 切换/清空数据集时重置表单（E2）：React 版这块状态在独立的 RuleForm 子组件里，
+// `v-if={datasetId}` 切换会整棵卸载、状态随之重置；Vue 把状态提升到页面级后必须显式重置，
+// 否则清空数据集再选回来会残留上一次的类型 / 阈值 / 关键词 / 报错。
+watch(datasetId, () => {
+  ruleType.value = 'negativity'
+  threshold.value = '50'
+  keyword.value = ''
+  formError.value = null
+})
+
 const add = useMutation({
   mutationFn: createRule,
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ['rules', datasetId.value] })
+    invalidate.rules(datasetId.value)
     keyword.value = ''
     toast.success('告警规则已创建')
   },
@@ -96,7 +107,10 @@ const submit = () => {
     <PageHeader title="告警中心" desc="配置规则，实时模拟或分析时会自动检测并推送">
       <template #extra>
         <div class="flex items-center gap-3">
-          <span v-if="unacked > 0" class="flex items-center gap-1.5 text-xs text-red-400">
+          <span
+            v-if="unacked > 0"
+            class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400"
+          >
             <span class="relative flex h-2 w-2">
               <span
                 class="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-60"
@@ -165,7 +179,9 @@ const submit = () => {
                 添加
               </Button>
             </div>
-            <div v-if="formError" class="mt-2 text-xs text-red-400">{{ formError }}</div>
+            <div v-if="formError" class="mt-2 text-xs text-red-600 dark:text-red-400">
+              {{ formError }}
+            </div>
           </div>
           <div
             v-for="r in rules || []"
@@ -175,7 +191,8 @@ const submit = () => {
             <Badge :tone="ruleTone[r.type]">{{ typeLabel[r.type] }}</Badge>
             <span class="flex-1 text-sm text-ink-200">
               <template v-if="r.type === 'keyword'">
-                含「<span class="text-ink-100">{{ r.keyword }}</span>」
+                含「<span class="text-ink-100">{{ r.keyword }}</span
+                >」
               </template>
               <template v-else>
                 阈值 <span class="tabular-nums text-ink-100">{{ r.threshold }}</span
@@ -184,13 +201,17 @@ const submit = () => {
             </span>
             <button
               class="rounded-md px-2 py-1 text-xs transition-colors"
-              :class="r.enabled ? 'bg-accent-500/15 text-accent-400' : 'bg-ink-800 text-ink-400'"
+              :class="
+                r.enabled
+                  ? 'bg-accent-500/15 text-accent-600 dark:text-accent-400'
+                  : 'bg-ink-800 text-ink-400'
+              "
               @click="toggle.mutate({ id: r.id, enabled: !r.enabled })"
             >
               {{ r.enabled ? '启用中' : '已停用' }}
             </button>
             <button
-              class="text-ink-400 transition-colors hover:text-red-400"
+              class="text-ink-400 transition-colors hover:text-red-600 dark:hover:text-red-400"
               @click="del.mutate(r.id)"
             >
               <Trash2 :size="14" />
@@ -227,14 +248,18 @@ const submit = () => {
                 class="rounded-lg border px-3 py-2.5"
                 :class="
                   a.severity === 'critical'
-                    ? 'border-red-800/50 bg-red-950/25'
-                    : 'border-amber-800/40 bg-amber-950/15'
+                    ? 'border-red-600/40 bg-red-100 dark:border-red-800/50 dark:bg-red-950/25'
+                    : 'border-amber-600/40 bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/15'
                 "
               >
                 <div class="flex items-start gap-2">
                   <span
                     class="flex-1 text-sm leading-snug"
-                    :class="a.severity === 'critical' ? 'text-red-200' : 'text-amber-200'"
+                    :class="
+                      a.severity === 'critical'
+                        ? 'text-red-800 dark:text-red-200'
+                        : 'text-amber-800 dark:text-amber-200'
+                    "
                   >
                     {{ a.message }}
                   </span>

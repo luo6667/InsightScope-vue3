@@ -1,7 +1,7 @@
 /**
  * 📘 lib/ai.ts —— AI 流式对话（SSE 打字机效果）
  *
- * 请求 Next 的 /api/ai（route handler 转发到 AI 服务），响应是 text/event-stream：
+ * 请求后端的 /api/ai（Express 路由转发到 AI 服务），响应是 text/event-stream：
  * - 用 ReadableStream 的 reader 逐块读，按 \n 切行，解析以 data: 开头的行里的 JSON；
  * - 每次取 delta 增量内容回调 onDelta()，前端逐字追加，形成打字机效果；
  * - 处理了：多 data 块跨 chunk 拼接、[DONE] 结束标记、AbortSignal 中止、
@@ -10,6 +10,7 @@
 import type { AiConfig } from '@/stores/settings'
 
 import { getAccessToken } from './auth'
+import { apiUrl } from './env'
 
 export interface ChatMessage {
   role: 'system' | 'user'
@@ -19,7 +20,7 @@ export interface ChatMessage {
 /**
  * AI 流式对话（SSE 打字机效果）
  *
- * 浏览器 → POST /api/ai（Next route handler）→ 服务端转发到 OpenAI / DeepSeek 兼容接口 → SSE 透传。
+ * 浏览器 → POST /api/ai（Express 路由）→ 服务端转发到 OpenAI / DeepSeek 兼容接口 → SSE 透传。
  * apiKey 由用户在前端「设置」页填写（存 localStorage），随请求体传给服务端，仅本次请求内存使用、不落库。
  * 好处：解决浏览器直连第三方 AI 的 CORS 问题（OpenAI 官方会拒绝），key 不直接暴露在请求 URL。
  */
@@ -44,7 +45,7 @@ export async function streamChat(
   }
 
   const token = getAccessToken()
-  const res = await fetch('/api/ai', {
+  const res = await fetch(apiUrl('/ai'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

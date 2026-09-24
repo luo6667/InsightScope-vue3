@@ -1,11 +1,11 @@
-@import "tailwindcss";
-@import "@fontsource-variable/outfit";
+@import 'tailwindcss';
+@import '@fontsource-variable/outfit';
 
 /* dark: 变体跟随应用的 data-theme（默认是 prefers-color-scheme，与项目主题机制不同步） */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme {
-  --font-sans: "Outfit Variable", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-sans: 'Outfit Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 
   /* ink 色引用运行时 CSS 变量，支持深浅主题切换 */
   --color-ink-950: var(--ink-950);
@@ -47,7 +47,7 @@
 }
 
 /* 浅色主题 */
-[data-theme="light"] {
+[data-theme='light'] {
   --ink-950: #f3f5f9;
   --ink-900: #ffffff;
   --ink-850: #eef1f6;
@@ -84,7 +84,7 @@ body {
   transition: background-color 0.2s ease;
 }
 
-[data-theme="light"] body {
+[data-theme='light'] body {
   background:
     radial-gradient(1100px 520px at 12% -8%, rgba(56, 189, 248, 0.05), transparent 62%),
     radial-gradient(900px 480px at 108% 108%, rgba(245, 158, 11, 0.05), transparent 60%),

@@ -1,4 +1,8 @@
 import '@/index.css'
+// vue-sonner 的样式是独立文件（react 版 sonner 是运行时注入，Vue 版必须显式引入），
+// 不引会导致 <Toaster> 渲染成文档流里位于页面左上角的裸 <ol>。放在 index.css 之后、
+// element-overrides.css 之前，保证 sonner 自身规则不被 preflight 压掉。
+import 'vue-sonner/style.css'
 import '@/styles/element-overrides.css'
 
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'

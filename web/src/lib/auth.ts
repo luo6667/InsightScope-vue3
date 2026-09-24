@@ -1,5 +1,6 @@
 // 访问口令（ACCESS_TOKEN）的浏览器端存储
 // 与后端「访问口令认证」配套：请求带 Authorization: Bearer <token>，socket 握手带 auth.token
+import { readStorage, removeStorage, writeStorage } from './storage'
 
 const STORAGE_KEY = 'insight-access-token'
 
@@ -9,30 +10,18 @@ export const UNAUTHORIZED_EVENT = 'insight:unauthorized'
 export const TOKEN_SET_EVENT = 'insight:token-set'
 
 export function getAccessToken(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) ?? ''
-  } catch {
-    return ''
-  }
+  return readStorage(STORAGE_KEY) ?? ''
 }
 
 export function setAccessToken(token: string): void {
   const t = token.trim()
-  try {
-    if (t) localStorage.setItem(STORAGE_KEY, t)
-    else localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    /* localStorage 不可用（隐私模式等）时静默 */
-  }
+  if (t) writeStorage(STORAGE_KEY, t)
+  else removeStorage(STORAGE_KEY)
   window.dispatchEvent(new CustomEvent(TOKEN_SET_EVENT, { detail: { token: t } }))
 }
 
 export function clearAccessToken(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    /* noop */
-  }
+  removeStorage(STORAGE_KEY)
   window.dispatchEvent(new CustomEvent(TOKEN_SET_EVENT, { detail: { token: '' } }))
 }
 

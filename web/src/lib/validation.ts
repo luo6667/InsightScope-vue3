@@ -9,6 +9,9 @@ import { z } from 'zod'
 export const SENTIMENTS = ['pos', 'neu', 'neg'] as const
 export const RULE_TYPES = ['negativity', 'volume', 'keyword'] as const
 
+/** 情感取值（由 SENTIMENTS 派生，全前端唯一来源；api/types.ts 直接再导出） */
+export type Sentiment = (typeof SENTIMENTS)[number]
+
 // ============ 分析运行：必填校验（对应后端 createAnalysisBodySchema,与设置页可留空的 aiSettingsSchema 互补） ============
 
 /**

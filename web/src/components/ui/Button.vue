@@ -15,7 +15,8 @@ const btnVariants: Record<BtnVariant, string> = {
     'bg-accent-500 text-accent-950 hover:bg-accent-400 shadow-[0_1px_0_rgba(255,255,255,0.15)_inset,0_4px_14px_-4px_rgba(245,158,11,0.45)]',
   outline: 'border border-ink-700 text-ink-300 hover:bg-ink-850 hover:text-ink-100',
   ghost: 'text-ink-400 hover:bg-ink-850 hover:text-ink-100',
-  danger: 'border border-red-800/70 text-red-300 hover:bg-red-950/50',
+  danger:
+    'border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800/70 dark:text-red-300 dark:hover:bg-red-950/50',
 }
 const btnSizes: Record<BtnSize, string> = { sm: 'h-8 px-3 text-xs', md: 'h-9 px-4 text-sm' }
 </script>

@@ -8,7 +8,7 @@
  * （返回值是 ref，脚本里取 .value）；原文件里的局部组件 ScenarioCard / Badge / PasteImport /
  * CsvImport / FeedImport 受 SFC 单组件限制改为本文件内联渲染（状态、校验、文案逐字保留）。
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useMutation, useQuery } from '@tanstack/vue-query'
 import {
   ArrowRight,
   ClipboardPaste,
@@ -27,11 +27,13 @@ import { useRouter } from 'vue-router'
 import { createFeedDataset, createScenarioDataset, importComments, listScenarios } from '@/api/api'
 import ImportFieldsModal from '@/components/ImportFieldsModal.vue'
 import { Button, Card, Field, Input, PageHeader, Textarea } from '@/components/ui'
+import { fieldCls } from '@/components/ui/field'
 import { useImportForm } from '@/composables/useImportForm'
+import { useInvalidateDataset } from '@/composables/useInvalidateDataset'
 import { type CsvRow, downloadCsvTemplate, parseCsv } from '@/lib/csv'
 import { csvImportSchema, feedImportSchema, firstError, pasteImportSchema } from '@/lib/validation'
 
-const qc = useQueryClient()
+const invalidate = useInvalidateDataset()
 const router = useRouter()
 
 /** 内置场景列表（queryKey 与 React 版一致：['scenarios']） */
@@ -43,7 +45,7 @@ const showFields = ref(false)
 const { mutate: createScenario, isPending: creating } = useMutation({
   mutationFn: (scenarioId: string) => createScenarioDataset(scenarioId),
   onSuccess: (r) => {
-    qc.invalidateQueries({ queryKey: ['datasets'] })
+    invalidate.datasets()
     router.push({ path: '/dashboard', query: { dataset: r.id } })
   },
 })
@@ -53,7 +55,7 @@ const goDashboard = (id: string) => router.push({ path: '/dashboard', query: { d
 
 /** 原 TSX 文件内局部 Badge（tone=accent）的配色，本页只用在一处，直接内联成 span */
 const featuredBadgeCls =
-  'rounded-md px-1.5 py-0.5 text-xs font-medium bg-accent-500/10 text-accent-400'
+  'rounded-md px-1.5 py-0.5 text-xs font-medium bg-accent-500/10 text-accent-600 dark:text-accent-400'
 
 // ============ 粘贴评论导入（原 PasteImport） ============
 const pasteName = ref('')
@@ -126,10 +128,13 @@ const submitCsv = async () => {
     csvFail(firstError(parsed.error))
     return
   }
+  // csvImportRowSchema 的 content 是可选的（与后端 importCommentSchema 对齐；CSV 解析层已滤掉空内容），
+  // 这里用类型守卫收窄为 CsvRow（content 必填），提交的数据与收窄前完全一致，不做兜底改写。
+  const rows = parsed.data.rows.filter((r): r is CsvRow => r.content !== undefined)
   await csvRun(
     () =>
       importComments(
-        parsed.data.rows.map((row) => ({
+        rows.map((row) => ({
           content: row.content,
           author: row.author,
           platform: row.platform,
@@ -187,7 +192,7 @@ const closeFields = () => {
     </PageHeader>
 
     <h2 class="mt-8 flex items-center gap-2 text-sm font-medium text-ink-200">
-      <FileUp :size="15" class="text-accent-400" />
+      <FileUp :size="15" class="text-accent-600 dark:text-accent-400" />
       内置舆情场景
     </h2>
     <div class="mt-3 grid gap-3 lg:grid-cols-2">
@@ -205,7 +210,7 @@ const closeFields = () => {
           :class="i === 0 ? 'lg:flex-row lg:items-center' : ''"
         >
           <span
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-accent-400 transition-colors group-hover:bg-accent-500/15"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-accent-600 dark:text-accent-400 transition-colors group-hover:bg-accent-500/15"
           >
             <MessagesSquare :size="20" :stroke-width="1.8" />
           </span>
@@ -230,7 +235,7 @@ const closeFields = () => {
                 {{ s.days }} 天时间线
               </span>
               <span
-                class="ml-auto flex items-center gap-1 text-accent-400 opacity-0 transition-opacity group-hover:opacity-100"
+                class="ml-auto flex items-center gap-1 text-accent-600 dark:text-accent-400 opacity-0 transition-opacity group-hover:opacity-100"
               >
                 导入
                 <ArrowRight :size="13" />
@@ -242,7 +247,7 @@ const closeFields = () => {
     </div>
 
     <h2 class="mt-9 flex items-center gap-2 text-sm font-medium text-ink-200">
-      <ClipboardPaste :size="15" class="text-accent-400" />
+      <ClipboardPaste :size="15" class="text-accent-600 dark:text-accent-400" />
       粘贴评论导入
     </h2>
     <div class="mt-3">
@@ -251,7 +256,7 @@ const closeFields = () => {
           <input
             v-model="pasteName"
             placeholder="例如：某电商平台 7 月用户反馈"
-            class="h-9 w-full rounded-lg border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-500 outline-none transition-colors focus:border-accent-500"
+            :class="['h-9', fieldCls]"
           />
         </Field>
         <div class="mt-3">
@@ -259,7 +264,9 @@ const closeFields = () => {
             <Textarea v-model="pasteText" :rows="7" :placeholder="pastePlaceholder" />
           </Field>
         </div>
-        <div v-if="pasteError" class="mt-2 text-xs text-red-400">{{ pasteError }}</div>
+        <div v-if="pasteError" class="mt-2 text-xs text-red-600 dark:text-red-400">
+          {{ pasteError }}
+        </div>
         <div class="mt-4">
           <Button
             variant="primary"
@@ -274,7 +281,7 @@ const closeFields = () => {
     </div>
 
     <h2 class="mt-9 flex items-center gap-2 text-sm font-medium text-ink-200">
-      <FileSpreadsheet :size="15" class="text-accent-400" />
+      <FileSpreadsheet :size="15" class="text-accent-600 dark:text-accent-400" />
       CSV 文件导入
     </h2>
     <div class="mt-3">
@@ -307,7 +314,9 @@ const closeFields = () => {
             </Button>
           </template>
         </div>
-        <div v-if="csvError" class="mt-2 text-xs text-red-400">{{ csvError }}</div>
+        <div v-if="csvError" class="mt-2 text-xs text-red-600 dark:text-red-400">
+          {{ csvError }}
+        </div>
         <div
           v-if="csvRows && csvRows.length > 0"
           class="mt-3 rounded-lg border border-ink-800 bg-ink-950 p-3"
@@ -323,7 +332,7 @@ const closeFields = () => {
     </div>
 
     <h2 class="mt-9 flex items-center gap-2 text-sm font-medium text-ink-200">
-      <Radio :size="15" class="text-accent-400" />
+      <Radio :size="15" class="text-accent-600 dark:text-accent-400" />
       URL 定时抓取
     </h2>
     <div class="mt-3">
@@ -356,7 +365,9 @@ const closeFields = () => {
             JSONPlaceholder 公开 API
           </Button>
         </div>
-        <div v-if="feedError" class="mt-2 text-xs text-red-400">{{ feedError }}</div>
+        <div v-if="feedError" class="mt-2 text-xs text-red-600 dark:text-red-400">
+          {{ feedError }}
+        </div>
         <div class="mt-4">
           <Button variant="primary" :disabled="feedLoading || !feedUrl.trim()" @click="submitFeed">
             <Radio :size="15" />

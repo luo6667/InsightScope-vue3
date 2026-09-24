@@ -49,3 +49,14 @@ html:root {
   --el-border-radius-base: 0.5rem;
   --el-box-shadow-light: 0 20px 44px -12px rgb(0 0 0 / 0.35);
 }
+
+/**
+ * 浅色主题修正（E1）：
+ * 1. 遮罩必须始终是深色半透明，否则浅色下弹窗背景会变成一片白，看不出层级；
+ * 2. 浮层阴影在浅底上要更淡，否则弹窗/下拉显得发黑。
+ * 选择器写成 html[data-theme="light"]（与 html:root 同优先级，靠源码顺序生效）。
+ */
+html[data-theme='light'] {
+  --el-mask-color: rgb(15 23 42 / 0.45);
+  --el-box-shadow-light: 0 20px 44px -12px rgb(15 23 42 / 0.16);
+}

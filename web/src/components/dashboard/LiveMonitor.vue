@@ -71,10 +71,10 @@ const speedModel = computed<string | number | undefined>({
             class="mt-0.5 text-lg font-semibold tabular-nums"
             :class="
               windowNegRate > 40
-                ? 'text-red-400'
+                ? 'text-red-600 dark:text-red-400'
                 : windowNegRate > 20
-                  ? 'text-amber-400'
-                  : 'text-emerald-400'
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-emerald-600 dark:text-emerald-400'
             "
           >
             {{ windowNegRate }}%
@@ -84,14 +84,16 @@ const speedModel = computed<string | number | undefined>({
           <div class="text-xs font-medium uppercase tracking-wider text-ink-400">告警</div>
           <div
             class="mt-0.5 text-lg font-semibold tabular-nums"
-            :class="alerts.length > 0 ? 'text-red-400' : 'text-ink-100'"
+            :class="alerts.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-ink-100'"
           >
             {{ alerts.length }}
           </div>
         </div>
       </div>
 
-      <div v-if="simError" class="mb-3 mt-3 text-xs text-red-400">{{ simError }}</div>
+      <div v-if="simError" class="mb-3 mt-3 text-xs text-red-600 dark:text-red-400">
+        {{ simError }}
+      </div>
 
       <AnimatePresence>
         <motion.div
@@ -104,18 +106,26 @@ const speedModel = computed<string | number | undefined>({
           class="mb-2 flex items-start gap-2.5 overflow-hidden rounded-lg border px-3.5 py-2.5"
           :class="
             a.severity === 'critical'
-              ? 'border-red-800/60 bg-red-950/40'
-              : 'border-amber-800/50 bg-amber-950/30'
+              ? 'border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/40'
+              : 'border-amber-300 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/30'
           "
         >
           <Bell
             :size="15"
             class="mt-0.5 shrink-0"
-            :class="a.severity === 'critical' ? 'text-red-400' : 'text-amber-400'"
+            :class="
+              a.severity === 'critical'
+                ? 'text-red-500 dark:text-red-400'
+                : 'text-amber-600 dark:text-amber-400'
+            "
           />
           <span
             class="flex-1 text-[13px] leading-snug"
-            :class="a.severity === 'critical' ? 'text-red-200' : 'text-amber-200'"
+            :class="
+              a.severity === 'critical'
+                ? 'text-red-800 dark:text-red-200'
+                : 'text-amber-800 dark:text-amber-200'
+            "
           >
             {{ a.message }}
           </span>

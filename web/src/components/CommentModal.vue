@@ -15,7 +15,7 @@ import { AnimatePresence, motion } from 'motion-v'
 import { onUnmounted, ref, watch } from 'vue'
 
 import { updateComment } from '@/api/api'
-import type { CommentRow } from '@/api/types'
+import type { CommentRow, Sentiment } from '@/api/types'
 import { Badge, Button, Input } from '@/components/ui'
 import { errMsg } from '@/lib/errors'
 import { formatTime } from '@/lib/format'
@@ -28,12 +28,26 @@ const props = defineProps<{
 }>()
 
 const sentimentOptions = [
-  { value: 'pos', label: '正面', cls: 'text-emerald-400 border-emerald-800' },
-  { value: 'neu', label: '中性', cls: 'text-sky-400 border-sky-800' },
-  { value: 'neg', label: '负面', cls: 'text-red-400 border-red-800' },
+  {
+    value: 'pos',
+    label: '正面',
+    cls: 'text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800',
+  },
+  {
+    value: 'neu',
+    label: '中性',
+    cls: 'text-sky-600 dark:text-sky-400 border-sky-300 dark:border-sky-800',
+  },
+  {
+    value: 'neg',
+    label: '负面',
+    cls: 'text-red-600 dark:text-red-400 border-red-300 dark:border-red-800',
+  },
 ] as const
 
-const sentiment = ref<string>(props.comment?.sentiment ?? 'neu')
+// sentimentOptions 用 as const 声明，o.value 已经是 'pos' | 'neu' | 'neg' 字面量，
+// 所以这里直接把本地状态声明成 Sentiment 即可，模板里 `sentiment = o.value` 无需断言。
+const sentiment = ref<Sentiment>(props.comment?.sentiment ?? 'neu')
 const topicsText = ref(props.comment?.topics.join('、') ?? '')
 const saving = ref(false)
 const error = ref<string | null>(null)
@@ -87,6 +101,7 @@ const save = async () => {
   <AnimatePresence>
     <motion.div
       v-if="props.comment"
+      key="comment-modal"
       :initial="{ opacity: 0 }"
       :animate="{ opacity: 1 }"
       :exit="{ opacity: 0 }"
@@ -103,7 +118,7 @@ const save = async () => {
       >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 text-sm font-medium text-ink-100">
-            <Pencil :size="15" class="text-accent-400" />
+            <Pencil :size="15" class="text-accent-600 dark:text-accent-400" />
             评论详情
           </div>
           <button class="text-ink-400 hover:text-ink-100" @click="props.onClose">
@@ -148,7 +163,7 @@ const save = async () => {
           <Input v-model="topicsText" placeholder="如：闪退、性能" />
         </div>
 
-        <div v-if="error" class="mt-2 text-xs text-red-400">{{ error }}</div>
+        <div v-if="error" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ error }}</div>
 
         <div class="mt-5 flex justify-end gap-2">
           <Button variant="ghost" @click="props.onClose">取消</Button>

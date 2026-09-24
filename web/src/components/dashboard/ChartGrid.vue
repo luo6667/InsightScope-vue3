@@ -6,28 +6,18 @@
  * React 的 early return → v-if / v-else；className → class；onEvents={{...}} → :on-events。
  * 回调仍是 props（onTopicFilterChange / onRangeAChange / onRangeBChange），与 React 契约同名。
  */
-import type { EChartsOption } from 'echarts'
 import { Activity, Info, MessageSquareText, Radar, Scale, Tags, X } from 'lucide-vue-next'
+import { computed } from 'vue'
 
 import type { DatasetStats } from '@/api/types'
 import EChart from '@/components/EChart.vue'
 import { Card, CardHeader, Skeleton } from '@/components/ui'
+import { useTheme } from '@/composables/useTheme'
 
 import NotAnalyzed from './NotAnalyzed.vue'
-import { compareDonut } from './options'
+import { CHART_PALETTES, compareDonut } from './options'
 import RangeField from './RangeField.vue'
-
-interface ChartOptions {
-  donut: EChartsOption
-  trend: EChartsOption
-  topic: EChartsOption
-  wordcloud: EChartsOption
-}
-
-interface RangeValue {
-  from: string
-  to: string
-}
+import type { ChartOptions, RangeValue } from './types'
 
 const props = defineProps<{
   stats?: DatasetStats
@@ -41,6 +31,10 @@ const props = defineProps<{
   statsA?: DatasetStats
   statsB?: DatasetStats
 }>()
+
+// 时段对比两图的配色也要随主题切换：palette 变化会让模板里的 compareDonut 重新推导 option
+const { theme } = useTheme()
+const palette = computed(() => CHART_PALETTES[theme.value])
 
 /** 主题条形图点击钻取（等价 TSX 里内联的 onEvents.click） */
 const onTopicClick = (p: unknown) => {
@@ -65,7 +59,7 @@ const topicEvents = { click: onTopicClick }
   <div v-else class="mt-4">
     <div
       v-if="stats.analyzed === 0"
-      class="mb-3 flex items-center gap-2 rounded-lg border border-amber-800/40 bg-amber-950/20 px-3.5 py-2.5 text-[13px] text-amber-300"
+      class="mb-3 flex items-center gap-2 rounded-lg border border-amber-600/50 bg-amber-100 px-3.5 py-2.5 text-[13px] text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300"
     >
       <Info :size="14" class="shrink-0" />
       该数据集尚未分析（{{ stats.total }} 条评论待处理），去「智能分析」开始后情感 / 趋势 /
@@ -94,7 +88,7 @@ const topicEvents = { click: onTopicClick }
         <CardHeader title="热门主题">
           <template #icon><Tags :size="15" /></template>
           <template v-if="topicFilter" #extra>
-            <span class="flex items-center gap-1 text-xs text-accent-400">
+            <span class="flex items-center gap-1 text-xs text-accent-600 dark:text-accent-400">
               {{ topicFilter }}
               <button class="hover:text-ink-100" @click="onTopicFilterChange?.(null)">
                 <X :size="12" />
@@ -135,13 +129,13 @@ const topicEvents = { click: onTopicClick }
             <div class="mb-2 text-xs font-medium text-ink-300">
               {{ rangeA.from }} ~ {{ rangeA.to }}（{{ statsA.total }} 条）
             </div>
-            <EChart :option="compareDonut(statsA)" class="h-40" />
+            <EChart :option="compareDonut(statsA, palette)" class="h-40" />
           </div>
           <div class="rounded-xl border border-ink-800 bg-ink-950 p-3">
             <div class="mb-2 text-xs font-medium text-ink-300">
               {{ rangeB.from }} ~ {{ rangeB.to }}（{{ statsB.total }} 条）
             </div>
-            <EChart :option="compareDonut(statsB)" class="h-40" />
+            <EChart :option="compareDonut(statsB, palette)" class="h-40" />
           </div>
         </div>
       </div>

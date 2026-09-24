@@ -4,12 +4,14 @@
  * - parseCsv：首行表头,支持中文/英文列名,引号包裹字段
  * - downloadCsvTemplate：下载带 UTF-8 BOM 的模板(Excel 打开不乱码)
  */
+import { downloadText } from './download'
+import type { Sentiment } from './validation'
 
 export interface CsvRow {
   content: string
   author?: string
   platform?: string
-  sentiment?: string
+  sentiment?: Sentiment
 }
 
 /** 解析单行 CSV：支持双引号包裹字段、引号内逗号、转义引号 "" */
@@ -111,11 +113,5 @@ export function downloadCsvTemplate(): void {
     '客服态度很好，问题解决很快,小红,京东,pos',
     '手机用起来很流畅，性能不错,阿伟,天猫,pos',
   ].join('\r\n')
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = '评论导入模板.csv'
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadText('\uFEFF' + csv, '评论导入模板.csv', 'text/csv;charset=utf-8')
 }

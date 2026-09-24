@@ -7,7 +7,7 @@ defineProps<{ label: string; hint?: string; error?: string }>()
   <label class="block">
     <span class="mb-1 block text-[13px] font-medium text-ink-300">{{ label }}</span>
     <slot />
-    <span v-if="error" class="mt-1 block text-xs text-red-400">{{ error }}</span>
+    <span v-if="error" class="mt-1 block text-xs text-red-600 dark:text-red-400">{{ error }}</span>
     <span v-else-if="hint" class="mt-1 block text-xs text-ink-400">{{ hint }}</span>
   </label>
 </template>

@@ -5,6 +5,8 @@
  * 好处：后端接口地址或参数变了只改这一处；返回类型从 api/types.ts 对齐。
  * 按业务分块：数据集 / 定时抓取 / 评论与统计 / 导出 / 场景 / 分析任务 / 模拟器 / 告警。
  */
+import { downloadUrl } from '../lib/download'
+import { apiUrl } from '../lib/env'
 import { del, get, patch, post } from './client'
 import type {
   Alert,
@@ -13,7 +15,9 @@ import type {
   CommentRow,
   DatasetInfo,
   DatasetStats,
+  ImportComment,
   ScenarioInfo,
+  Sentiment,
 } from './types'
 
 // 数据集
@@ -21,7 +25,7 @@ export const listDatasets = () =>
   get<{ datasets: DatasetInfo[] }>('/datasets').then((r) => r.datasets)
 export const createScenarioDataset = (scenarioId: string, name?: string) =>
   post<{ id: string; count: number }>('/datasets', { scenarioId, name })
-export const importComments = (comments: unknown[], name?: string, platform?: string) =>
+export const importComments = (comments: ImportComment[], name?: string, platform?: string) =>
   post<{ id: string; count: number }>('/datasets', { comments, name, platform })
 export const deleteDataset = (id: string) => del<{ ok: boolean }>(`/datasets/${id}`)
 
@@ -30,8 +34,9 @@ export const createFeedDataset = (name: string, feedUrl: string, feedIntervalMin
   post<{ id: string; count: number }>('/datasets', { name, feedUrl, feedIntervalMin })
 export const startFeedPull = (id: string) => post<{ ok: boolean }>(`/datasets/${id}/feed/start`)
 export const stopFeedPull = (id: string) => post<{ ok: boolean }>(`/datasets/${id}/feed/stop`)
+/** skipped=true 表示该数据集已有抓取在跑，后端未重复执行（此时 count 恒为 0） */
 export const pullFeedNow = (id: string) =>
-  post<{ ok: boolean; count: number }>(`/datasets/${id}/feed/pull`)
+  post<{ ok: boolean; count: number; skipped?: boolean }>(`/datasets/${id}/feed/pull`)
 
 // 评论与统计
 export const listComments = (datasetId: string, params?: Record<string, unknown>) =>
@@ -46,15 +51,20 @@ export const getStats = (datasetId: string, params?: Record<string, unknown>) =>
 export const updateComment = (
   datasetId: string,
   cid: string,
-  body: { sentiment?: string; topics?: string[]; sentimentScore?: number },
+  body: { sentiment?: Sentiment; topics?: string[]; sentimentScore?: number },
 ) => patch<{ ok: boolean }>(`/datasets/${datasetId}/comments/${cid}`, body)
 
-// 导出（返回 blob）
+/**
+ * 导出评论（浏览器原生下载）。
+ * baseURL 取 lib/env.ts 的 API_BASE，与 axios 请求保持一致；
+ * 注意 `<a download>` 不会带 Authorization 头 —— 后端启用 ACCESS_TOKEN 时这里会被 401 拒绝
+ * （属已知待办「导出鉴权」，未包含在本次内部重构范围内）。
+ */
 export function exportComments(datasetId: string, format: 'csv' | 'json'): void {
-  const a = document.createElement('a')
-  a.href = `/api/datasets/${datasetId}/export?format=${format}`
-  a.download = `comments-${datasetId}.${format}`
-  a.click()
+  downloadUrl(
+    apiUrl(`/datasets/${datasetId}/export?format=${format}`),
+    `comments-${datasetId}.${format}`,
+  )
 }
 
 // 场景

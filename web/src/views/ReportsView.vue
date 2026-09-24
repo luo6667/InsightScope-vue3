@@ -22,8 +22,11 @@ import { Button, Card, CardHeader, EmptyState, PageHeader } from '@/components/u
 import { useCurrentDataset } from '@/composables/useCurrentDataset'
 import { useDatasets, useDatasetStats } from '@/composables/useData'
 import { streamChat } from '@/lib/ai'
+import { REPORT_HISTORY_KEY, REPORT_HISTORY_MAX } from '@/lib/constants'
+import { downloadText } from '@/lib/download'
 import { errMsg } from '@/lib/errors'
 import { formatTime } from '@/lib/format'
+import { readJson, writeJson } from '@/lib/storage'
 import { useSettingsStore } from '@/stores/settings'
 
 const REPORT_SYSTEM = `你是舆情分析专家。基于用户提供的评论统计数据，用中文 Markdown 输出一份「舆情周报」，结构：
@@ -43,14 +46,8 @@ interface SavedReport {
   content: string
 }
 
-const HISTORY_KEY = 'insight-reports'
-
 function loadHistory(): SavedReport[] {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as SavedReport[]
-  } catch {
-    return []
-  }
+  return readJson<SavedReport[]>(REPORT_HISTORY_KEY, [])
 }
 
 function buildStatsText(stats: DatasetStats): string {
@@ -151,25 +148,23 @@ watch([report, generating, datasetId], () => {
     createdAt: formatTime(Date.now()),
     content: report.value,
   }
-  const next = [item, ...loadHistory()].slice(0, 100)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+  const next = [item, ...loadHistory()].slice(0, REPORT_HISTORY_MAX)
+  writeJson(REPORT_HISTORY_KEY, next)
   history.value = next.filter((h) => h.datasetId === datasetId.value)
   toast.success('舆情周报已生成并保存到历史')
 })
 
 const exportMd = (text: string) => {
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `舆情周报-${new Date().toLocaleDateString('zh-CN')}.md`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadText(
+    text,
+    `舆情周报-${new Date().toLocaleDateString('zh-CN')}.md`,
+    'text/markdown;charset=utf-8',
+  )
 }
 
 const removeHistory = (id: string) => {
   const next = loadHistory().filter((h) => h.id !== id)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+  writeJson(REPORT_HISTORY_KEY, next)
   history.value = next.filter((h) => h.datasetId === datasetId.value)
   if (activeHistory.value?.id === id) activeHistory.value = null
 }
@@ -190,10 +185,7 @@ const historyTitle = computed(() => {
 
 <template>
   <div class="mx-auto max-w-4xl px-6 py-8">
-    <PageHeader
-      title="舆情报告"
-      desc="AI 基于统计数据自动生成舆情周报（流式输出，自动保存历史）"
-    >
+    <PageHeader title="舆情报告" desc="AI 基于统计数据自动生成舆情周报（流式输出，自动保存历史）">
       <template #extra>
         <DatasetPicker
           :datasets="datasets"
@@ -232,11 +224,11 @@ const historyTitle = computed(() => {
 
         <div
           v-if="datasetId && !settings.apiKey"
-          class="mt-3 rounded-lg border border-amber-800/50 bg-amber-950/25 px-3.5 py-2.5 text-xs text-amber-300"
+          class="mt-3 rounded-lg border border-amber-600/50 bg-amber-100 px-3.5 py-2.5 text-xs text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/25 dark:text-amber-300"
         >
           尚未配置 API key，先到「设置」填入
         </div>
-        <div v-if="error" class="mt-3 text-xs text-red-400">{{ error }}</div>
+        <div v-if="error" class="mt-3 text-xs text-red-600 dark:text-red-400">{{ error }}</div>
 
         <Card class="mt-4">
           <CardHeader
@@ -251,13 +243,17 @@ const historyTitle = computed(() => {
               v-if="!report && !generating && !activeHistory"
               class="flex h-40 items-center justify-center text-xs text-ink-400"
             >
-              {{ datasetId ? '选择数据集后点击「生成舆情周报」' : '从右侧历史记录查看，或选择数据集生成' }}
+              {{
+                datasetId
+                  ? '点击上方「生成舆情周报」开始生成'
+                  : '从右侧历史记录查看，或选择数据集生成'
+              }}
             </div>
             <div
               v-if="generating && !report"
               class="flex h-40 items-center justify-center gap-2 text-xs text-ink-400"
             >
-              <Loader2 :size="14" class="animate-spin text-accent-400" />
+              <Loader2 :size="14" class="animate-spin text-accent-600 dark:text-accent-400" />
               AI 正在撰写报告…
             </div>
             <div
@@ -300,7 +296,7 @@ const historyTitle = computed(() => {
                 导出
               </button>
               <button
-                class="rounded px-2 py-0.5 text-[11px] text-ink-400 hover:text-red-400"
+                class="rounded px-2 py-0.5 text-[11px] text-ink-400 hover:text-red-600 dark:hover:text-red-400"
                 @click="removeHistory(h.id)"
               >
                 <Trash2 :size="11" />

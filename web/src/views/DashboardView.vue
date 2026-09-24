@@ -8,7 +8,6 @@
  * 相比 React 版：useState → ref、useEffect(deps) → watch + onCleanup、chartOptions 的 IIFE → computed
  * （承担 React Compiler 的记忆化语义：stats 不变则引用稳定）、query 的 data 是 Ref（脚本 .value / 模板自动解包）。
  */
-import { useQueryClient } from '@tanstack/vue-query'
 import { Radar } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 
@@ -18,6 +17,7 @@ import CommentModal from '@/components/CommentModal.vue'
 import ChartGrid from '@/components/dashboard/ChartGrid.vue'
 import LiveMonitor from '@/components/dashboard/LiveMonitor.vue'
 import {
+  CHART_PALETTES,
   donutOption,
   topicOption,
   trendOption,
@@ -25,11 +25,14 @@ import {
 } from '@/components/dashboard/options'
 import OverviewStats from '@/components/dashboard/OverviewStats.vue'
 import RecentComments from '@/components/dashboard/RecentComments.vue'
+import type { RangeValue } from '@/components/dashboard/types'
 import DatasetPicker from '@/components/DatasetPicker.vue'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { useCurrentDataset } from '@/composables/useCurrentDataset'
 import { useComments, useDatasets, useDatasetStats } from '@/composables/useData'
 import { useDatasetSocket } from '@/composables/useDatasetSocket'
+import { useInvalidateDataset } from '@/composables/useInvalidateDataset'
+import { useTheme } from '@/composables/useTheme'
 import { customDictKey } from '@/lib/customDict'
 import { errMsg } from '@/lib/errors'
 
@@ -39,12 +42,22 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-interface RangeValue {
-  from: string
-  to: string
+/**
+ * 时间范围口径（E2）：把「本地日历日」的边界转成带时区的 ISO 时刻再发给后端。
+ * 原先发 `${date}T00:00:00`（无时区）会被后端按**服务器时区**解析，浏览器与服务器时区不一致时，
+ * 「最近 7 天」会整体偏移；这里统一按浏览器本地日边界取绝对时刻（同 TZ 下结果完全一致）。
+ */
+function localDayStart(date: string): string {
+  return new Date(`${date}T00:00:00`).toISOString()
 }
 
-const qc = useQueryClient()
+function localDayEnd(date: string): string {
+  return new Date(`${date}T23:59:59.999`).toISOString()
+}
+
+const invalidate = useInvalidateDataset()
+// 当前主题（模块级单例）：图表的调色板依赖它，切换深浅色时自动重算
+const { theme } = useTheme()
 const { datasetId, setDatasetId } = useCurrentDataset()
 
 const { data: datasets } = useDatasets()
@@ -65,13 +78,13 @@ const { data: commentsRes } = useComments(datasetId, commentParams)
 const rangeA = ref<RangeValue>({ from: daysAgo(7), to: daysAgo(0) })
 const rangeB = ref<RangeValue>({ from: daysAgo(14), to: daysAgo(8) })
 const rangeAParams = computed<Record<string, unknown>>(() => ({
-  from: `${rangeA.value.from}T00:00:00`,
-  to: `${rangeA.value.to}T23:59:59`,
+  from: localDayStart(rangeA.value.from),
+  to: localDayEnd(rangeA.value.to),
   ...dictParam,
 }))
 const rangeBParams = computed<Record<string, unknown>>(() => ({
-  from: `${rangeB.value.from}T00:00:00`,
-  to: `${rangeB.value.to}T23:59:59`,
+  from: localDayStart(rangeB.value.from),
+  to: localDayEnd(rangeB.value.to),
   ...dictParam,
 }))
 const { data: statsA } = useDatasetStats(datasetId, rangeAParams)
@@ -171,14 +184,16 @@ const toggleSim = async () => {
 const current = computed(() => datasets.value?.find((d) => d.id === datasetId.value))
 
 // 图表 option（computed 承担 React Compiler 的记忆化：stats 不变时引用稳定，避免实时流入触发全图重绘）
+// 额外依赖 theme：ECharts 画在 canvas 上读不到 CSS 变量，切换深浅色时必须用新调色板重算 option
 const chartOptions = computed(() => {
   const s = stats.value
   if (!s) return null
+  const palette = CHART_PALETTES[theme.value]
   return {
-    donut: donutOption(s),
-    trend: trendOption(s),
-    topic: topicOption(s),
-    wordcloud: wordcloudOption(s),
+    donut: donutOption(s, palette),
+    trend: trendOption(s, palette),
+    topic: topicOption(s, palette),
+    wordcloud: wordcloudOption(s, palette),
   }
 })
 
@@ -208,8 +223,8 @@ const handleCloseModal = () => {
   selectedComment.value = null
 }
 const handleSaved = () => {
-  qc.invalidateQueries({ queryKey: ['comments', datasetId.value] })
-  qc.invalidateQueries({ queryKey: ['stats', datasetId.value] })
+  invalidate.comments(datasetId.value)
+  invalidate.stats(datasetId.value)
 }
 </script>
 
@@ -264,8 +279,10 @@ const handleSaved = () => {
       />
     </template>
 
+    <!-- 这里刻意不写 :key="selectedComment?.id"：父级换 key 会让 Vue 直接重建整个组件，
+         内部的 AnimatePresence 永远拿不到「移除」这一帧，关闭时的淡出动画就会失效。
+         表单重置已由 CommentModal 内部 watch(props.comment?.id) 负责（与带 key 的行为一致）。 -->
     <CommentModal
-      :key="selectedComment?.id ?? 'closed'"
       :dataset-id="datasetId"
       :comment="selectedComment"
       :on-close="handleCloseModal"

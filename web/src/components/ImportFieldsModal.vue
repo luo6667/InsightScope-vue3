@@ -89,6 +89,7 @@ const jsonExample = '{ comments: [...] }'
   <AnimatePresence>
     <motion.div
       v-if="props.open"
+      key="import-fields-modal"
       :initial="{ opacity: 0 }"
       :animate="{ opacity: 1 }"
       :exit="{ opacity: 0 }"
@@ -105,7 +106,7 @@ const jsonExample = '{ comments: [...] }'
       >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 text-sm font-medium text-ink-100">
-            <Info :size="15" class="text-accent-400" />
+            <Info :size="15" class="text-accent-600 dark:text-accent-400" />
             导入评论字段说明
           </div>
           <button class="text-ink-400 hover:text-ink-100" @click="props.onClose">

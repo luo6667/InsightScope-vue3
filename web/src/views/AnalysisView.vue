@@ -10,7 +10,6 @@
  * 等价于 React 每次渲染重建回调（切换数据集后 invalidate 的仍是当前 key）。
  * 本页没有原生下拉/分页/弹窗，故不直接使用 Element Plus（数据集下拉由 DatasetPicker 内部承担）。
  */
-import { useQueryClient } from '@tanstack/vue-query'
 import {
   AlertTriangle,
   BrainCircuit,
@@ -35,6 +34,7 @@ import { Badge, Button, Card, CardHeader, EmptyState, PageHeader } from '@/compo
 import { useCurrentDataset } from '@/composables/useCurrentDataset'
 import { useAnalysisJob, useDatasets } from '@/composables/useData'
 import { useDatasetSocket } from '@/composables/useDatasetSocket'
+import { useInvalidateDataset } from '@/composables/useInvalidateDataset'
 import { errMsg } from '@/lib/errors'
 import { analysisRunSchema, firstError } from '@/lib/validation'
 import { useSettingsStore } from '@/stores/settings'
@@ -49,7 +49,7 @@ const jobTone: Record<string, 'neutral' | 'pos' | 'neg' | 'accent'> = {
 
 const { datasetId, setDatasetId } = useCurrentDataset()
 const settings = useSettingsStore()
-const qc = useQueryClient()
+const invalidate = useInvalidateDataset()
 
 const { data: datasets } = useDatasets()
 const { data: job } = useAnalysisJob(datasetId)
@@ -59,7 +59,7 @@ const error = ref<string | null>(null)
 
 // socket 进度实时推送（datasetId 变化由 useDatasetSocket 内部自动重订阅）
 useDatasetSocket(datasetId, {
-  'analysis:progress': () => qc.invalidateQueries({ queryKey: ['job', datasetId.value] }),
+  'analysis:progress': () => invalidate.job(datasetId.value),
 })
 
 const run = async (fn: () => Promise<unknown>) => {
@@ -67,7 +67,7 @@ const run = async (fn: () => Promise<unknown>) => {
   error.value = null
   try {
     await fn()
-    qc.invalidateQueries({ queryKey: ['job', datasetId.value] })
+    invalidate.job(datasetId.value)
   } catch (e) {
     error.value = errMsg(e)
   } finally {
@@ -126,9 +126,7 @@ const cancel = () => {
 
 const clearResults = () => {
   if (confirm('确认清空该数据集的全部分析结果？评论将重置为未分析状态，可重新分析。')) {
-    void run(() => resetAnalysis(datasetId.value)).then(() =>
-      qc.invalidateQueries({ queryKey: ['stats', datasetId.value] }),
-    )
+    void run(() => resetAnalysis(datasetId.value)).then(() => invalidate.stats(datasetId.value))
   }
 }
 </script>
@@ -183,7 +181,7 @@ const clearResults = () => {
         <AlertTriangle :size="14" class="shrink-0" />
         尚未配置 API key（内置场景已预标注，无需分析）。到「设置」填入后即可分析导入的数据。
       </div>
-      <div v-if="error" class="mt-3 text-xs text-red-400">{{ error }}</div>
+      <div v-if="error" class="mt-3 text-xs text-red-600 dark:text-red-400">{{ error }}</div>
 
       <Card v-if="job" class="mt-5">
         <CardHeader :title="jobTitle">
@@ -209,7 +207,10 @@ const clearResults = () => {
           </div>
           <div class="mt-3 flex gap-4 text-xs text-ink-400">
             <span
-              >失败 <span class="tabular-nums text-red-400">{{ job.failed }}</span></span
+              >失败
+              <span class="tabular-nums text-red-600 dark:text-red-400">{{
+                job.failed
+              }}</span></span
             >
             <span
               >并发 <span class="tabular-nums">{{ job.concurrency }}</span></span

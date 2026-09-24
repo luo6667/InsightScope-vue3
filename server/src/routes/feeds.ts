@@ -29,12 +29,18 @@ function emit(datasetId: string, event: string, payload: unknown) {
   io.to(`dataset:${datasetId}`).emit(event, payload);
 }
 
-/** 抓取一次数据源（带锁，防并发） */
-async function fetchFeed(datasetId: string): Promise<number> {
-  if (feedLocks.has(datasetId)) return 0;
+/**
+ * 抓取一次数据源（带锁，防并发）。
+ * skipped=true 表示该数据集已有抓取在跑、本次直接跳过（此时 count 恒为 0），
+ * 便于调用方区分「没抢到锁」与「真的抓到 0 条新数据」。
+ */
+export type FeedFetchResult = { count: number; skipped: boolean };
+
+async function fetchFeed(datasetId: string): Promise<FeedFetchResult> {
+  if (feedLocks.has(datasetId)) return { count: 0, skipped: true };
   feedLocks.add(datasetId);
   try {
-    return await doFetchFeed(datasetId);
+    return { count: await doFetchFeed(datasetId), skipped: false };
   } finally {
     feedLocks.delete(datasetId);
   }
@@ -158,8 +164,8 @@ router.post("/:datasetId/feed/stop", validate({ params: datasetIdParamSchema }),
 
 // 立即抓取一次：POST /:id/feed/pull
 router.post("/:datasetId/feed/pull", validate({ params: datasetIdParamSchema }), async (req, res) => {
-  const count = await fetchFeed(paramsOf(req, "datasetId"));
-  res.json({ ok: true, count });
+  const { count, skipped } = await fetchFeed(paramsOf(req, "datasetId"));
+  res.json({ ok: true, count, skipped });
 });
 
 // 本地演示数据源：GET /api/demo/feed（每次随机返回池中若干条,字段稳定——内容/作者/情感绑定、

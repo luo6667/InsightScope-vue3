@@ -16,7 +16,7 @@
       to="/datasets"
       class="rounded-lg bg-accent-500 px-5 py-2 text-sm font-semibold text-accent-950 transition-opacity hover:opacity-90"
     >
-      返回监控台
+      返回数据集
     </RouterLink>
   </main>
 </template>

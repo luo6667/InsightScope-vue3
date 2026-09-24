@@ -7,7 +7,7 @@
  */
 interface ImportMetaEnv {
   /** 前端请求 API 的公共前缀，默认 /api */
-  readonly VITE_API_BASE?: string;
+  readonly VITE_API_BASE?: string
   /** socket.io 直连地址；生产同源反代时留空 */
-  readonly VITE_SOCKET_URL?: string;
+  readonly VITE_SOCKET_URL?: string
 }

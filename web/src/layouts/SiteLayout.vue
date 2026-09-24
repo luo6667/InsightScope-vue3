@@ -118,7 +118,7 @@ const isActive = (to: string) => route.path === to
           </RouterLink>
           <button
             :title="theme === 'dark' ? '切换浅色' : '切换深色'"
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-ink-700 text-ink-400 transition-colors hover:text-accent-400"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-ink-700 text-ink-400 transition-colors hover:text-accent-600 dark:hover:text-accent-400"
             @click="toggleTheme"
           >
             <Sun v-if="theme === 'dark'" :size="15" />
@@ -136,7 +136,7 @@ const isActive = (to: string) => route.path === to
           :key="item.to"
           :to="item.to"
           class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1 text-[10px]"
-          :class="isActive(item.to) ? 'text-accent-400' : 'text-ink-400'"
+          :class="isActive(item.to) ? 'text-accent-600 dark:text-accent-400' : 'text-ink-400'"
         >
           <component :is="item.icon" :size="18" :stroke-width="2" />
           {{ item.label }}

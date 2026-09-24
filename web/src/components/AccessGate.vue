@@ -11,11 +11,11 @@
  * React → Vue：useState → ref，useEffect(挂载/卸载) → onMounted/onUnmounted，
  * useQueryClient() 在 vue-query 里同名同用法。
  */
-import { useQueryClient } from '@tanstack/vue-query'
 import { KeyRound, Loader2, Lock } from 'lucide-vue-next'
 import { onMounted, onUnmounted, ref } from 'vue'
 
 import { Button, Card, Field, Input } from '@/components/ui'
+import { useInvalidateDataset } from '@/composables/useInvalidateDataset'
 import { getAccessToken, setAccessToken, UNAUTHORIZED_EVENT } from '@/lib/auth'
 import { refreshSocketAuth } from '@/lib/socket'
 
@@ -23,7 +23,7 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
 type GateState = 'checking' | 'locked' | 'open'
 
-const queryClient = useQueryClient()
+const invalidate = useInvalidateDataset()
 const gate = ref<GateState>('checking')
 const token = ref('')
 const error = ref('')
@@ -76,7 +76,7 @@ const submit = async () => {
     }
     setAccessToken(t)
     refreshSocketAuth() // 用新口令重连 socket
-    void queryClient.invalidateQueries() // 刷新所有已失败的数据
+    invalidate.all() // 刷新所有已失败的数据
     gate.value = 'open'
   } catch {
     error.value = '无法连接服务器，请检查网络'
@@ -100,7 +100,7 @@ const submit = async () => {
     <Card class="w-full max-w-sm p-6">
       <div class="flex items-center gap-3">
         <span
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-500/15 text-accent-400"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-400"
         >
           <Lock :size="18" />
         </span>
@@ -119,7 +119,7 @@ const submit = async () => {
             <Input v-model="token" type="password" autofocus placeholder="输入口令" class="pl-9" />
           </div>
         </Field>
-        <div v-if="error" class="text-[13px] text-red-400">{{ error }}</div>
+        <div v-if="error" class="text-[13px] text-red-600 dark:text-red-400">{{ error }}</div>
         <Button variant="primary" class="w-full" :disabled="!token.trim() || busy">
           <Loader2 v-if="busy" :size="15" class="animate-spin" />
           {{ busy ? '验证中…' : '进入系统' }}
