@@ -80,6 +80,8 @@ export interface AlertRule {
   type: (typeof RULE_TYPES)[number]
   threshold: number
   keyword: string
+  /** 评论量规则的时间窗口（分钟）：语义为「最近 N 分钟新增条数 ≥ threshold」 */
+  windowMin: number
   enabled: boolean
 }
 

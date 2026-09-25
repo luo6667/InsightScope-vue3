@@ -108,6 +108,8 @@ export const createRule = (body: {
   type: string
   threshold: number
   keyword?: string
+  /** 评论量规则的时间窗口（分钟）：最近 N 分钟新增条数 ≥ threshold */
+  windowMin?: number
 }) => post<{ id: string }>('/alerts/rules', body)
 export const updateRule = (id: string, body: Partial<AlertRule>) =>
   patch<{ ok: boolean }>(`/alerts/rules/${id}`, body)

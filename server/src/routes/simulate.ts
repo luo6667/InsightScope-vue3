@@ -3,16 +3,16 @@
  *
  * 原理：tick() 循环——按 timestamp 升序一条条把评论通过 socket 的 comment:stream
  * 事件推给前端，推送间隔 = max(30, 1000/speed)ms（speed 1~20，20 倍速约 20 条/秒）。
- * 每条流入后 checkAlerts()：负面率 Z-score 异常 + 规则阈值 + 敏感关键词 →
- * 生成告警（带 60s 冷却）并推 alert:new。
+ * 每条流入后调用共用告警引擎 services/alertEngine.ts 的 checkAlerts()：负面率 Z-score 异常 +
+ * 规则阈值 + 敏感关键词/评论量 → 生成告警（带 60s 冷却）并推 alert:new。
+ * 定时抓取入库（routes/feeds.ts）与 AI 分析写回（routes/analysis.ts）也调用同一个引擎。
  * 关键点：内存 Map sims 记录每个数据集的播放进度；stop/restart 时用对象引用
  * 比对丢弃旧链路，防止并发竞态（旧 tick 不再继续）。
  */
 import { Router } from "express";
-import { Op } from "sequelize";
-import { AlertModel, AlertRuleModel, CommentModel } from "../models.js";
+import { CommentModel } from "../models.js";
 import { io } from "../index.js";
-import { detectAnomaly } from "../services/anomalyService.js";
+import { checkAlerts } from "../services/alertEngine.js";
 import { validate, paramsOf, datasetIdParamSchema, speedBodySchema } from "../validation.js";
 
 const router = Router();
@@ -20,120 +20,8 @@ const router = Router();
 // 模拟器状态：dataset -> { timer, index, speed }
 const sims = new Map<string, { timer: ReturnType<typeof setTimeout> | null; index: number; speed: number }>();
 
-const WINDOW = 20; // 告警检测窗口（最近 N 条）
-const COOLDOWN_MS = 60_000; // 同规则冷却
-
 function emit(datasetId: string, event: string, payload: unknown) {
   io.to(`dataset:${datasetId}`).emit(event, payload);
-}
-
-/**
- * 触发告警检测：负面率 Z-score 异常 + 规则阈值 + 关键词。
- * cutoff：模拟器重放时只检测"已流入"的评论（timestamp <= cutoff），保证演示时序正确。
- */
-async function checkAlerts(datasetId: string, cutoff?: Date) {
-  const rules = await AlertRuleModel.findAll({ where: { datasetId, enabled: true } });
-  if (rules.length === 0) return;
-
-  const timeFilter = cutoff ? { timestamp: { [Op.lte]: cutoff } } : {};
-  const recent = await CommentModel.findAll({
-    where: { datasetId, ...timeFilter },
-    order: [["timestamp", "DESC"]],
-    limit: WINDOW,
-  });
-  if (recent.length < 5) return;
-
-  const negRate = recent.filter((c) => c.sentiment === "neg").length / recent.length;
-
-  // Z-score：滑动窗口负面率序列（每 5 条采样）检测突增（只统计已流入的评论）
-  let anomalyMsg: string | null = null;
-  try {
-    if (!/^\d+$/.test(datasetId)) throw new Error("invalid dataset id");
-    const rows = await CommentModel.findAll({
-      where: { datasetId, ...timeFilter },
-      attributes: ["sentiment"],
-      order: [["timestamp", "ASC"]],
-      raw: true,
-    });
-    const items = rows.map((r) => r.sentiment);
-    const seq: number[] = [];
-    for (let i = 0; i < items.length; i += 1) {
-      const slice = items.slice(Math.max(0, i - WINDOW), i + 1);
-      seq.push(slice.filter((s) => s === "neg").length / slice.length);
-    }
-    const sampled: number[] = [];
-    for (let i = 0; i < seq.length; i += 5) sampled.push(Math.round(seq[i] * 100) / 100);
-    const res = detectAnomaly(sampled, 2);
-    if (res?.isAnomaly && res.current > res.mean) {
-      anomalyMsg = `负面率异常突增：当前 ${Math.round(res.current * 100)}%，基线 ${Math.round(res.mean * 100)}%（Z=${res.zScore.toFixed(1)}）`;
-    }
-  } catch {
-    /* Z-score 失败不影响规则检测 */
-  }
-
-  const triggers: { type: string; severity: "critical" | "warning" | "info"; message: string; value: number }[] = [];
-
-  // 冷却检查：同一数据集 + 类型最近 60s 是否已触发
-  const inCooldown = async (type: string) => {
-    const recentAlert = await AlertModel.findOne({
-      where: { datasetId, type, triggeredAt: { [Op.gte]: new Date(Date.now() - COOLDOWN_MS) } },
-    });
-    return !!recentAlert;
-  };
-
-  if (anomalyMsg && !(await inCooldown("negativity"))) {
-    triggers.push({ type: "negativity", severity: "critical", message: anomalyMsg, value: Math.round(negRate * 100) });
-  }
-
-  for (const rule of rules) {
-    if (await inCooldown(rule.type)) continue;
-
-    if (rule.type === "negativity" && negRate >= rule.threshold / 100) {
-      triggers.push({
-        type: "negativity",
-        severity: "warning",
-        message: `负面率超过阈值 ${rule.threshold}%：当前 ${Math.round(negRate * 100)}%`,
-        value: Math.round(negRate * 100),
-      });
-    } else if (rule.type === "keyword" && rule.keyword) {
-      const hit = recent.find((c) => c.content.includes(rule.keyword));
-      if (hit) {
-        triggers.push({
-          type: "keyword",
-          severity: "info",
-          message: `检测到敏感关键词「${rule.keyword}」：${hit.content.slice(0, 40)}…`,
-          value: 1,
-        });
-      }
-    } else if (rule.type === "volume" && recent.length >= rule.threshold) {
-      triggers.push({
-        type: "volume",
-        severity: "warning",
-        message: `窗口内评论量达到 ${recent.length}（阈值 ${rule.threshold}）`,
-        value: recent.length,
-      });
-    }
-  }
-
-  for (const t of triggers) {
-    const alert = await AlertModel.create({
-      datasetId,
-      type: t.type,
-      severity: t.severity,
-      message: t.message,
-      value: t.value,
-    });
-    emit(datasetId, "alert:new", {
-      id: String(alert.id),
-      datasetId,
-      type: alert.type,
-      severity: alert.severity,
-      message: alert.message,
-      value: alert.value,
-      triggeredAt: alert.triggeredAt,
-      acknowledged: false,
-    });
-  }
 }
 
 async function tick(datasetId: string) {

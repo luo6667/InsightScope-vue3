@@ -12,12 +12,13 @@
 import { Router } from "express";
 import axios from "axios";
 import { Op } from "sequelize";
-import { AnalysisJobModel, CommentModel } from "../models.js";
+import { AnalysisJobModel, CommentModel, DatasetModel } from "../models.js";
 import { io } from "../index.js";
 import { HttpError } from "../utils/httpUtils.js";
 import { assertPublicHttpUrl } from "../utils/urlSafety.js";
 import { parseJsonArray } from "../utils/jsonUtils.js";
 import { validate, paramsOf, datasetIdParamSchema, createAnalysisBodySchema } from "../validation.js";
+import { checkAlerts } from "../services/alertEngine.js";
 import type { Sentiment } from "../types.js";
 
 const router = Router();
@@ -243,6 +244,13 @@ async function runJob(jobId: string) {
       total: job.total,
       failed,
     });
+    // 分析写回后重新评估告警规则：此前只有「实时监控」播放时才检测规则，
+    // 真实数据（AI 分析完）永远不会触发告警
+    if (finalStatus === "done") {
+      await checkAlerts(String(job.datasetId)).catch((e) =>
+        console.error("[analysis] checkAlerts failed", jobId, e instanceof Error ? e.message : e)
+      );
+    }
   } catch (e) {
     // 兜底：任务异常不崩进程，置失败
     console.error("[analysis] job crashed", jobId, e instanceof Error ? e.message : e);
@@ -263,13 +271,17 @@ router.post(
     const { apiKey, baseUrl, model, temperature, concurrency } = req.body;
     // SSRF 防护：baseUrl 必须是公网 http/https，不允许内网地址
     const safeBase = assertPublicHttpUrl(baseUrl, "baseUrl");
+    const datasetId = paramsOf(req, "datasetId");
+    // 数据集存在性校验：此前对不存在的 id 也返回 201，会创建出永远跑不完的「幽灵分析任务」
+    const dataset = await DatasetModel.findByPk(datasetId, { attributes: ["id"] });
+    if (!dataset) return res.status(404).json({ error: "数据集不存在" });
     const existing = await AnalysisJobModel.findOne({
-      where: { datasetId: paramsOf(req, "datasetId"), status: { [Op.in]: ["pending", "running"] } },
+      where: { datasetId, status: { [Op.in]: ["pending", "running"] } },
     });
     if (existing) return res.json({ job: existing });
 
     const job = await AnalysisJobModel.create({
-      datasetId: paramsOf(req, "datasetId"),
+      datasetId,
       status: "pending",
       concurrency,
     });

@@ -6,10 +6,10 @@
  * - 统计 /stats：情感分组计数、按天趋势、主题与关键词词频（textService 提取）；
  * - 修正 PATCH：人工改情感/主题（前端弹窗保存）。
  */
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { Op } from "sequelize";
 import { sequelize } from "../db.js";
-import { CommentModel } from "../models.js";
+import { CommentModel, DatasetModel } from "../models.js";
 import { countKeywords } from "../services/textService.js";
 import {
   validate,
@@ -24,6 +24,24 @@ import {
 } from "../validation.js";
 
 const router = Router();
+
+/** 导出分批大小：边查边写，避免一次性把整份数据读进内存 */
+const EXPORT_BATCH = 1000;
+
+/**
+ * 数据集存在性校验。
+ * 此前对任意 datasetId 都返回 200（空列表 / 空 CSV / 全 0 统计），前端只能显示「没有数据」，
+ * 无法区分「数据集不存在」与「数据集是空的」。
+ */
+async function requireDataset(req: Request, res: Response): Promise<string | null> {
+  const id = paramsOf(req, "datasetId");
+  const exists = await DatasetModel.findByPk(id, { attributes: ["id"] });
+  if (!exists) {
+    res.status(404).json({ error: "数据集不存在" });
+    return null;
+  }
+  return id;
+}
 
 /** MySQL LIKE 转义：% _ \（保证与原先正则字面量搜索行为一致） */
 function escapeLike(s: string): string {
@@ -61,10 +79,12 @@ router.get(
   "/:datasetId/comments",
   validate({ params: datasetIdParamSchema, query: commentListQuerySchema }),
   async (req, res) => {
+    const datasetId = await requireDataset(req, res);
+    if (!datasetId) return;
     const q = (req as ValidatedRequest).validatedQuery ?? {};
     const page = q.page as number;
     const limit = q.limit as number;
-    const filter = buildFilter(q, paramsOf(req, "datasetId"));
+    const filter = buildFilter(q, datasetId);
     const { count: total, rows } = await CommentModel.findAndCountAll({
       where: filter,
       order: [["timestamp", "DESC"]],
@@ -123,15 +143,11 @@ router.get(
   "/:datasetId/export",
   validate({ params: datasetIdParamSchema, query: exportQuerySchema }),
   async (req, res) => {
+    const datasetId = await requireDataset(req, res);
+    if (!datasetId) return;
     const q = (req as ValidatedRequest).validatedQuery ?? {};
     const format = q.format as "csv" | "json";
-    const filter = buildFilter(q, paramsOf(req, "datasetId"));
-    const rows = await CommentModel.findAll({
-      where: filter,
-      order: [["timestamp", "DESC"]],
-      limit: 5000,
-      raw: true,
-    });
+    const filter = buildFilter(q, datasetId);
 
     if (format === "csv") {
       const header = ["content", "author", "platform", "timestamp", "sentiment", "topics"];
@@ -141,31 +157,69 @@ router.get(
         const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
         return `"${safe.replace(/"/g, '""')}"`;
       };
-      const lines = [header.join(",")];
-      for (const c of rows) {
-        lines.push(
-          [c.content, c.author, c.platform, c.timestamp ? new Date(c.timestamp).toISOString() : "", c.sentiment, (c.topics ?? []).join("|")]
-            .map(escape)
-            .join(",")
-        );
-      }
       res.setHeader("Content-Type", "text/csv;charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename=comments-${paramsOf(req, "datasetId")}.csv`);
-      res.send("\uFEFF" + lines.join("\r\n"));
+      res.setHeader("Content-Disposition", `attachment; filename=comments-${datasetId}.csv`);
+      res.write("\uFEFF" + header.join(",") + "\r\n");
+      // 分批查询 + 边查边写：此前是 findAll({ limit: 5000 })，
+      // 超过 5000 条的导出会被静默截断（按 timestamp DESC 丢掉最旧的数据：
+      // /stats 显示 5600 条而 CSV 只有 5000 行）。现在导出全部匹配行。
+      // 排序里带 id 兜底：timestamp 可能重复，否则分批分页会漏行/重复行。
+      for (let offset = 0; ; offset += EXPORT_BATCH) {
+        const rows = await CommentModel.findAll({
+          where: filter,
+          order: [["timestamp", "DESC"], ["id", "DESC"]],
+          limit: EXPORT_BATCH,
+          offset,
+          raw: true,
+        });
+        if (rows.length === 0) break;
+        const chunk = rows
+          .map((c) =>
+            [
+              c.content,
+              c.author,
+              c.platform,
+              c.timestamp ? new Date(c.timestamp).toISOString() : "",
+              c.sentiment,
+              (c.topics ?? []).join("|"),
+            ]
+              .map(escape)
+              .join(",")
+          )
+          .join("\r\n");
+        res.write(chunk + "\r\n");
+        if (rows.length < EXPORT_BATCH) break;
+      }
+      res.end();
       return;
     }
-    res.json({
-      comments: rows.map((c) => ({
-        id: c.id,
-        content: c.content,
-        author: c.author,
-        platform: c.platform,
-        timestamp: c.timestamp,
-        sentiment: c.sentiment,
-        sentimentScore: c.sentimentScore,
-        topics: c.topics,
-      })),
-    });
+
+    // JSON 导出同样不再限制条数（分批累加，避免一次性把大结果集读进内存）
+    const comments: Record<string, unknown>[] = [];
+    for (let offset = 0; ; offset += EXPORT_BATCH) {
+      const rows = await CommentModel.findAll({
+        where: filter,
+        order: [["timestamp", "DESC"], ["id", "DESC"]],
+        limit: EXPORT_BATCH,
+        offset,
+        raw: true,
+      });
+      if (rows.length === 0) break;
+      for (const c of rows) {
+        comments.push({
+          id: c.id,
+          content: c.content,
+          author: c.author,
+          platform: c.platform,
+          timestamp: c.timestamp,
+          sentiment: c.sentiment,
+          sentimentScore: c.sentimentScore,
+          topics: c.topics,
+        });
+      }
+      if (rows.length < EXPORT_BATCH) break;
+    }
+    res.json({ comments });
   }
 );
 
@@ -175,7 +229,8 @@ router.get(
   validate({ params: datasetIdParamSchema, query: statsQuerySchema }),
   async (req, res) => {
     const q = (req as ValidatedRequest).validatedQuery ?? {};
-    const id = paramsOf(req, "datasetId");
+    const id = await requireDataset(req, res);
+    if (!id) return;
     const tf = timeFilter(q);
     const where: Record<string, unknown> = { datasetId: id, ...tf };
     const [total, analyzed, rows] = await Promise.all([

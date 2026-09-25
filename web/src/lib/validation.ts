@@ -84,8 +84,8 @@ export const feedImportSchema = z.object({
     .min(1, '数据源 URL 不能为空')
     .max(2048)
     .refine(
-      (v) => v.startsWith('/') || /^https?:\/\/.+/i.test(v),
-      '需为 http/https 地址，或相对路径（如 /api/demo/feed）',
+      (v) => /^https?:\/\/.+/i.test(v),
+      '需为 http/https 绝对地址（如 https://example.com/comments）',
     ),
   intervalMin: z.coerce.number().int().min(1).max(1440, '抓取间隔需在 1 ~ 1440 分钟之间'),
 })
@@ -98,6 +98,13 @@ export const alertRuleSchema = z
     type: z.enum(RULE_TYPES),
     threshold: z.coerce.number().min(0).max(100000),
     keyword: z.string().trim().max(255),
+    /** 评论量规则的时间窗口（分钟）：语义为「最近 N 分钟新增条数 ≥ 阈值」，默认 10 */
+    windowMin: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1440, '时间窗口需在 1 ~ 1440 分钟之间')
+      .default(10),
   })
   .superRefine((v, ctx) => {
     if (v.type === 'keyword' && !v.keyword) {

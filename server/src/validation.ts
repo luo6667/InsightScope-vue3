@@ -93,14 +93,31 @@ export const alertListQuerySchema = z.object({
 
 // ============ body ============
 
+/** 时间戳：字符串或毫秒数，且必须是能解析出有效日期的值 */
+const rawTimestampSchema = z
+  .union([z.string(), z.number()])
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), {
+    message: "timestamp 不是可解析的日期（支持 ISO 日期字符串或毫秒时间戳）",
+  });
+
 /** 导入/抓取的原始评论（字段可缺省，normalizeComment 会兜底） */
 const importCommentSchema = z.object({
   content: z.string().max(2000).optional(),
   text: z.string().max(2000).optional(),
   comment: z.string().max(2000).optional(),
   author: z.string().max(64).optional(),
+  // 作者/平台别名：不少数据源用 name/nickname/username/email 与 source/channel
+  // （例如 jsonplaceholder 的评论字段是 name）。zod 会剥掉未声明的键，
+  // 只声明 author/platform 会让这些数据全部落成「匿名用户 / 数据源」。
+  name: z.string().max(64).optional(),
+  nickname: z.string().max(64).optional(),
+  user: z.union([z.string().max(64), z.number()]).optional(),
+  username: z.string().max(64).optional(),
+  email: z.string().max(64).optional(),
   platform: z.string().max(64).optional(),
-  timestamp: z.union([z.string(), z.number()]).optional(),
+  source: z.string().max(64).optional(),
+  channel: z.string().max(64).optional(),
+  timestamp: rawTimestampSchema.optional(),
   sentiment: z.enum(SENTIMENTS).optional(),
   sentimentScore: z.number().min(-1).max(1).optional(),
   topics: z.array(z.string().max(50)).max(20).optional(),
@@ -147,6 +164,8 @@ export const createRuleBodySchema = z
     type: z.enum(RULE_TYPES),
     threshold: z.number().min(0).max(100_000),
     keyword: z.string().max(255).optional(),
+    /** 评论量规则的时间窗口（分钟）：判定「最近 N 分钟新增条数 ≥ threshold」，默认 10 */
+    windowMin: z.coerce.number().int().min(1).max(1440, "时间窗口需在 1 ~ 1440 分钟之间").default(10),
     enabled: z.boolean().optional(),
   })
   .superRefine((v, ctx) => {
@@ -160,6 +179,7 @@ export const updateRuleBodySchema = z
     type: z.enum(RULE_TYPES).optional(),
     threshold: z.number().min(0).max(100_000).optional(),
     keyword: z.string().max(255).optional(),
+    windowMin: z.coerce.number().int().min(1).max(1440, "时间窗口需在 1 ~ 1440 分钟之间").optional(),
     enabled: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "没有可更新的字段" });

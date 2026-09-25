@@ -9,11 +9,13 @@
  */
 import { Router } from "express";
 import { ALLOW_PRIVATE_FEED_URL } from "../config.js";
+import { sequelize } from "../db.js";
 import { DatasetModel, CommentModel, AnalysisJobModel, AlertModel, AlertRuleModel } from "../models.js";
 import { generateScenarioComments, getScenario } from "../services/scenarioService.js";
 import { stopFeed } from "./feeds.js";
 import { cancelJobsForDataset } from "./analysis.js";
 import { normalizeComment, dedupKeyOf } from "../utils/commentUtils.js";
+import { sourceLabelFromUrl } from "../utils/sourceLabel.js";
 import { assertPublicHttpUrl } from "../utils/urlSafety.js";
 import { validate, paramsOf, createDatasetBodySchema, idParamSchema } from "../validation.js";
 
@@ -76,68 +78,87 @@ router.post("/", validate({ body: createDatasetBodySchema }), async (req, res) =
   if (scenarioId) {
     const def = getScenario(scenarioId);
     if (!def) return res.status(400).json({ error: "场景不存在" });
-    const dataset = await DatasetModel.create({
-      name: name?.trim() || def.name,
-      platform: platform || "混合来源",
-      type: "builtin",
-      scenarioId,
-    });
     const generated = generateScenarioComments(def);
-    await CommentModel.bulkCreate(
-      generated.map((g) => ({
-        datasetId: dataset.id,
-        content: g.content,
-        author: g.author,
-        platform: g.platform,
-        timestamp: g.timestamp,
-        sentiment: g.sentiment,
-        sentimentScore: g.sentimentScore,
-        topics: g.topics,
-        keywords: g.keywords,
-        analyzed: true, // 内置场景已预标注，无 key 也能完整演示
-      }))
-    );
+    // 事务：数据集与评论一起成功/回滚，避免失败时留下 0 评论的空壳数据集
+    const dataset = await sequelize.transaction(async (t) => {
+      const created = await DatasetModel.create(
+        {
+          name: name?.trim() || def.name,
+          platform: platform || "混合来源",
+          type: "builtin",
+          scenarioId,
+        },
+        { transaction: t }
+      );
+      await CommentModel.bulkCreate(
+        generated.map((g) => ({
+          datasetId: created.id,
+          content: g.content,
+          author: g.author,
+          platform: g.platform,
+          timestamp: g.timestamp,
+          sentiment: g.sentiment,
+          sentimentScore: g.sentimentScore,
+          topics: g.topics,
+          keywords: g.keywords,
+          analyzed: true, // 内置场景已预标注，无 key 也能完整演示
+        })),
+        { transaction: t }
+      );
+      return created;
+    });
     return res.status(201).json({ id: dataset.id, count: generated.length });
   }
 
   if (Array.isArray(comments) && comments.length > 0) {
-    const dataset = await DatasetModel.create({
-      name: name?.trim() || `导入数据 ${new Date().toLocaleDateString("zh-CN")}`,
-      platform: platform || "导入来源",
-      type: "imported",
-    });
     const now = Date.now();
     // 去重规则（全项目统一）：评论显式携带的全部字段重合才算重复（见 commentUtils.dedupKeyOf）
     const seen = new Set<string>();
     let i = 0;
-    const docs = comments
-      .filter((c) => {
-        // 防御：导入数据可能混入 null / 标量元素
-        if (!c || typeof c !== "object") return false;
-        const key = dedupKeyOf(c as never);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((c) => {
-        const doc = normalizeComment(c as never, { platform: platform || "导入来源", now, index: i });
-        i++;
-        return { datasetId: dataset.id, ...doc };
-      });
-    await CommentModel.bulkCreate(docs);
-    return res.status(201).json({ id: dataset.id, count: docs.length, deduped: comments.length - docs.length });
+    const buildDocs = (datasetId: string) =>
+      comments
+        .filter((c) => {
+          // 防御：导入数据可能混入 null / 标量元素
+          if (!c || typeof c !== "object") return false;
+          const key = dedupKeyOf(c as never);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((c) => {
+          const doc = normalizeComment(c as never, { platform: platform || "导入来源", now, index: i });
+          i++;
+          return { datasetId, ...doc };
+        });
+
+    // 事务：数据集与评论一起提交或一起回滚。
+    // 此前没有事务：导入批次里只要有一条数据非法（如 timestamp 无法解析 → "Invalid date"），
+    // 整批 500 却会留下一个「0 评论」的空数据集，用户反复重试就越攒越多垃圾数据集。
+    const created = await sequelize.transaction(async (t) => {
+      const dataset = await DatasetModel.create(
+        {
+          name: name?.trim() || `导入数据 ${new Date().toLocaleDateString("zh-CN")}`,
+          platform: platform || "导入来源",
+          type: "imported",
+        },
+        { transaction: t }
+      );
+      const docs = buildDocs(String(dataset.id));
+      await CommentModel.bulkCreate(docs, { transaction: t });
+      return { id: dataset.id, count: docs.length };
+    });
+    return res.status(201).json({ id: created.id, count: created.count, deduped: comments.length - created.count });
   }
 
   // URL 定时抓取数据集
   if (typeof feedUrl === "string" && feedUrl.trim()) {
-    // SSRF 防护：绝对 URL 必须为公网地址；相对路径（如 /api/demo/feed）仅指向后端自身
+    // SSRF 防护：必须是 http/https 绝对地址（默认放行私网，见 ALLOW_PRIVATE_FEED_URL=0 可恢复严格校验）
     const trimmed = feedUrl.trim();
-    if (!trimmed.startsWith("/")) {
-      assertPublicHttpUrl(trimmed, "feedUrl", { allowPrivate: ALLOW_PRIVATE_FEED_URL });
-    }
+    assertPublicHttpUrl(trimmed, "feedUrl", { allowPrivate: ALLOW_PRIVATE_FEED_URL });
     const dataset = await DatasetModel.create({
       name: name?.trim() || `定时抓取 ${new Date().toLocaleDateString("zh-CN")}`,
-      platform: platform || "数据源",
+      // 来源名：用户没指定时用数据源 host（旧实现无脑写「数据源」→ 抓来的整批评论来源全显示「数据源」）
+      platform: platform || sourceLabelFromUrl(trimmed) || "数据源",
       type: "feed",
       feedUrl: trimmed,
       // schema 已保证为 1-1440 的整数（修复：此前 NaN 会入库、超大值会撑爆 setInterval）

@@ -146,6 +146,7 @@ export class AlertRule extends Model {
   declare type: string;
   declare threshold: number;
   declare keyword: string;
+  declare windowMin: number;
   declare enabled: boolean;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -164,6 +165,9 @@ AlertRule.init(
     type: { type: DataTypes.STRING(12), allowNull: false }, // negativity | volume | keyword
     threshold: { type: DataTypes.DOUBLE, allowNull: false },
     keyword: { type: DataTypes.STRING(255), defaultValue: "" },
+    // 评论量规则的时间窗口（分钟）：判定「最近 N 分钟内新增条数 ≥ threshold」。
+    // 其它两类规则不使用该字段，但保留默认值 10，历史规则由 db.ts 的幂等 ALTER 补齐。
+    windowMin: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 10 },
     enabled: { type: DataTypes.BOOLEAN, defaultValue: true },
   },
   { sequelize, tableName: "alert_rules", timestamps: true, indexes: [{ fields: ["datasetId"] }] }

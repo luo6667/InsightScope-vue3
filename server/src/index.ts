@@ -4,8 +4,7 @@
  * 程序启动后做的事，按顺序读：
  * 1. 中间件链：helmet(安全响应头) → cors(跨域白名单) → express.json(解析请求体)
  *    → rateLimit(写接口限流) → requireAccessToken(访问口令鉴权，未配置则放行)；
- * 2. 注册业务路由：datasets / comments / alerts / analysis / simulate / feeds
- *    （前缀 /api，另挂 /api/demo/feed 演示数据源）；
+ * 2. 注册业务路由：datasets / comments / alerts / analysis / simulate / feeds / ai（前缀 /api）；
  * 3. socket.io 与 HTTP 共用一个 server：浏览器直连 /socket.io，握手校验 ACCESS_TOKEN；
  * 4. main()：连 MySQL → 建表 → 监听端口。
  * 数据流：浏览器(前端) → /api 代理(开发 rewrites / 生产 nginx) → 这里的路由 → Sequelize → MySQL；
@@ -24,7 +23,6 @@ import {
   PORT,
   CORS_ORIGINS,
   RATE_LIMIT_PER_MIN,
-  ENABLE_MOCK_AI,
   authRequired as ACCESS_REQUIRED,
   assertProductionConfig,
 } from "./config.js";//配置文件
@@ -34,7 +32,7 @@ import commentsRouter from "./routes/comments.js";
 import alertsRouter from "./routes/alerts.js";
 import analysisRouter from "./routes/analysis.js";
 import simulateRouter from "./routes/simulate.js";
-import feedsRouter, { demoFeedHandler } from "./routes/feeds.js";
+import feedsRouter, { resumeFeeds } from "./routes/feeds.js";
 import aiRouter from "./routes/ai.js";
 import { DatasetModel } from "./models.js";//数据集模型
 import { listScenarios } from "./services/scenarioService.js";//场景服务
@@ -57,9 +55,6 @@ if (RATE_LIMIT_PER_MIN > 0) {
   console.log(`[config] 写接口限流已开启：${RATE_LIMIT_PER_MIN} 次/分钟/IP`);
 } else {
   console.warn("[config] 写接口限流未开启（RATE_LIMIT_PER_MIN=0）。公网部署建议设置，如 60。");
-}
-if (ENABLE_MOCK_AI) {
-  console.warn("[config] Mock AI 端点已开启（仅测试用，生产请保持关闭）");
 }
 
 // 进程级兜底：异步异常/未捕获异常只记日志，不崩进程，保证服务持续运行
@@ -167,37 +162,10 @@ app.use("/api/alerts", alertsRouter);
 // AI 流式对话转发（原 Next.js POST /api/ai 搬迁至此，路径与请求/响应格式不变）
 app.use("/api/ai", aiRouter);
 
-// 本地演示数据源（供 URL 定时抓取演示）
-app.get("/api/demo/feed", demoFeedHandler);
-
 // 内置场景列表
 app.get("/api/scenarios", (_req, res) => {
   res.json({ scenarios: listScenarios() });
 });
-
-// 本地 Mock AI（测试用，不走外网）：返回与评论条数一致的随机分析结果
-if (ENABLE_MOCK_AI) {
-  app.post("/api/mock-ai/chat/completions", (req, res) => {
-    const messages = req.body?.messages;
-    let user = "";
-    if (Array.isArray(messages)) {
-      for (const m of messages as { role?: string; content?: string }[]) {
-        if (m.role === "user") user = m.content ?? "";
-      }
-    }
-    const n = Math.max(1, (String(user).match(/^\d+\./gm) ?? []).length);
-    const roll = Math.random();
-    const sentiment = roll < 0.4 ? "pos" : roll < 0.7 ? "neu" : "neg";
-    const arr = Array.from({ length: n }, () => ({
-      sentiment,
-      sentimentScore: sentiment === "pos" ? 0.8 : sentiment === "neg" ? -0.8 : 0,
-      topics: ["测试主题"],
-      keywords: ["mock", "测试"],
-    }));
-    // 延迟 500ms，便于测试暂停/恢复/取消
-    setTimeout(() => res.json({ choices: [{ message: { content: JSON.stringify(arr) } }] }), 500);
-  });
-}
 
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: "接口不存在" });
@@ -244,10 +212,10 @@ async function main() {
   });
   httpServer.listen(PORT, () => {
     console.log(`[insight-server] http://localhost:${PORT}（API + socket.io）`);
+    // 恢复重启前处于运行中的定时抓取任务：DB 里 feedRunning=true 的必须重新挂上内存定时器，
+    // 否则卡片会一直显示「运行中」却再也不抓（此前只能在重启后手动重新点「启动」）。
+    void resumeFeeds();
   });
-
-  // 注：不自动恢复 server 重启前的定时抓取任务——feed 为手动启动模式（创建后不自动抓，
-  // 重启后需用户重新点「启动」，避免“没启动却在抓”）。
 }
 
 main();

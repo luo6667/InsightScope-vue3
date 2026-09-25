@@ -60,6 +60,8 @@ const unacked = computed(() => alerts.value?.filter((a) => !a.acknowledged).leng
 const ruleType = ref('negativity')
 const threshold = ref('50')
 const keyword = ref('')
+/** 评论量规则的时间窗口（分钟）：语义为「最近 N 分钟新增条数 ≥ 阈值」 */
+const windowMin = ref('10')
 const formError = ref<string | null>(null)
 
 // 切换/清空数据集时重置表单（E2）：React 版这块状态在独立的 RuleForm 子组件里，
@@ -69,6 +71,7 @@ watch(datasetId, () => {
   ruleType.value = 'negativity'
   threshold.value = '50'
   keyword.value = ''
+  windowMin.value = '10'
   formError.value = null
 })
 
@@ -90,6 +93,8 @@ const submit = () => {
     type: ruleType.value,
     threshold: ruleType.value === 'keyword' ? 1 : Number(threshold.value),
     keyword: ruleType.value === 'keyword' ? keyword.value.trim() : '',
+    // 只有评论量规则用得上窗口；其它类型交给 schema 的默认值（10）
+    windowMin: ruleType.value === 'volume' ? Number(windowMin.value) : undefined,
   })
   if (!parsed.success) {
     formError.value = firstError(parsed.error)
@@ -151,11 +156,15 @@ const submit = () => {
         <div class="space-y-2 p-4">
           <div class="rounded-lg border border-ink-800 bg-ink-950 p-3.5">
             <div class="flex gap-2">
-              <el-select v-model="ruleType" class="h-8 w-32 text-xs">
-                <el-option label="负面率阈值" value="negativity" />
-                <el-option label="评论量" value="volume" />
-                <el-option label="敏感关键词" value="keyword" />
-              </el-select>
+              <!-- shrink-0 必加：阈值输入框是 w-full（basis 很大），flex 会把宽度亏空
+                   按 basis 比例分摊，实测把 w-32/w-24 压成 62px / 47px、下拉文字被裁 -->
+              <div class="w-32 shrink-0">
+                <el-select v-model="ruleType" class="h-8 w-full text-xs">
+                  <el-option label="负面率阈值" value="negativity" />
+                  <el-option label="评论量" value="volume" />
+                  <el-option label="敏感关键词" value="keyword" />
+                </el-select>
+              </div>
               <Input
                 v-if="ruleType === 'keyword'"
                 v-model="keyword"
@@ -169,6 +178,18 @@ const submit = () => {
                 :placeholder="ruleType === 'negativity' ? '百分比' : '条数'"
                 class="h-8 w-24 text-xs"
               />
+              <!-- 评论量规则的时间窗口：语义是「最近 N 分钟新增条数 ≥ 阈值」。
+                   el-select 自带 width:100%，必须套外层 div 限宽（EP CSS 未分层会压掉 Tailwind 的 w-*）。 -->
+              <div v-if="ruleType === 'volume'" class="w-24 shrink-0">
+                <el-select v-model="windowMin" class="h-8 w-full text-xs">
+                  <el-option
+                    v-for="m in [5, 10, 30, 60, 180]"
+                    :key="m"
+                    :label="`${m} 分钟`"
+                    :value="String(m)"
+                  />
+                </el-select>
+              </div>
               <Button
                 size="sm"
                 variant="primary"
@@ -194,9 +215,13 @@ const submit = () => {
                 含「<span class="text-ink-100">{{ r.keyword }}</span
                 >」
               </template>
+              <template v-else-if="r.type === 'volume'">
+                最近 <span class="tabular-nums text-ink-100">{{ r.windowMin }}</span> 分钟新增 ≥
+                <span class="tabular-nums text-ink-100">{{ r.threshold }}</span> 条
+              </template>
               <template v-else>
                 阈值 <span class="tabular-nums text-ink-100">{{ r.threshold }}</span
-                >{{ r.type === 'negativity' ? '%' : ' 条' }}
+                >%
               </template>
             </span>
             <button

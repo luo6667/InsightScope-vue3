@@ -105,7 +105,17 @@ const onCsvFile = (file: File | undefined) => {
   csvFail(null)
   const reader = new FileReader()
   reader.onload = () => {
-    const parsed = parseCsv(String(reader.result ?? ''))
+    // parseCsv 现在会在「多列但没有可识别的表头」时抛错（此前静默取第 0 列，
+    // 会把整行数据塞进 content 并提示导入成功）。这里必须自己兜住：
+    // reader.onload 的异常不会走到 useImportForm 的 try/catch，会变成未捕获错误。
+    let parsed: CsvRow[]
+    try {
+      parsed = parseCsv(String(reader.result ?? ''))
+    } catch (e) {
+      csvRows.value = null
+      csvFail(e instanceof Error ? e.message : 'CSV 解析失败')
+      return
+    }
     if (parsed.length === 0) {
       csvRows.value = null
       csvFail('未能解析出评论，请确认 CSV 首行包含列名（content / 评论 / 内容）')
@@ -350,20 +360,8 @@ const closeFields = () => {
             label="数据源 URL"
             hint="返回 JSON 数组（或 { comments: [...] }）的接口，字段支持 content/author/platform/sentiment"
           >
-            <Input v-model="feedUrl" placeholder="https://jsonplaceholder.typicode.com/comments" />
+            <Input v-model="feedUrl" placeholder="https://example.com/comments" />
           </Field>
-        </div>
-        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <Button size="sm" variant="outline" @click="feedUrl = '/api/demo/feed'">
-            本地演示数据源
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            @click="feedUrl = 'https://jsonplaceholder.typicode.com/comments'"
-          >
-            JSONPlaceholder 公开 API
-          </Button>
         </div>
         <div v-if="feedError" class="mt-2 text-xs text-red-600 dark:text-red-400">
           {{ feedError }}

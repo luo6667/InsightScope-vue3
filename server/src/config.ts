@@ -12,7 +12,7 @@ import "dotenv/config"; // 加载 server/.env（不覆盖已存在的环境变�
 /**
  * 运行配置集中读取。
  * NODE_ENV=production 时执行生产强校验（assertProductionConfig）：
- * 密钥、CORS、限流、Mock AI、访问口令必须显式配置，不满足直接拒绝启动，
+ * 密钥、CORS、限流、访问口令必须显式配置，不满足直接拒绝启动，
  * 避免把「开发默认值」带到生产环境。
  */
 
@@ -31,15 +31,19 @@ export const CORS_ORIGINS = (
 /** 写接口简单限流：次/分钟/IP（0 关闭） */
 export const RATE_LIMIT_PER_MIN = Number(process.env.RATE_LIMIT_PER_MIN ?? 0);
 
-/** Mock AI 开关：默认关闭，仅显式设 ENABLE_MOCK_AI=true 才启用（测试用） */
-export const ENABLE_MOCK_AI = process.env.ENABLE_MOCK_AI === "true";
-
 /**
  * feedUrl 定时抓取是否允许私网/内网/本机地址（如 http://127.0.0.1:8080 的本地评论服务）。
  * 默认允许（本地/演示场景开箱即用）；生产环境如需恢复 SSRF 严格校验，设为 0。
  * 仅影响 feedUrl（定时抓取），AI 服务的 baseUrl 校验始终严格（analysis.ts）。
  */
 export const ALLOW_PRIVATE_FEED_URL = (process.env.ALLOW_PRIVATE_FEED_URL ?? "1") !== "0";
+
+/**
+ * 单次定时抓取最多入库多少条数据源条目（默认 2000）。
+ * 旧实现硬编码 slice(0, 200)：像 jsonplaceholder（500 条）这样的数据源会被静默截断，
+ * 用户只看到 200 条且没有任何提示；现在改为可配置，超出时会打 warn 日志。
+ */
+export const FEED_MAX_ITEMS = Math.max(1, Number(process.env.FEED_MAX_ITEMS ?? 2000));
 
 /**
  * 访问口令（Bearer token）：设置后所有 /api/* 与 socket.io 连接必须携带，
@@ -62,9 +66,6 @@ export function assertProductionConfig(): void {
   }
   if (!(RATE_LIMIT_PER_MIN > 0)) {
     problems.push("RATE_LIMIT_PER_MIN 必须大于 0（公网部署建议 60）");
-  }
-  if (ENABLE_MOCK_AI) {
-    problems.push("ENABLE_MOCK_AI 必须为 false（生产禁止开启 Mock AI 端点）");
   }
   if (!ACCESS_TOKEN) {
     problems.push("ACCESS_TOKEN 必须设置（访问口令，所有 /api 与 socket 连接凭此鉴权）");

@@ -115,10 +115,12 @@ watch(
   (id, _prev, onCleanup) => {
     liveComments.value = []
     alerts.value = []
+    simRunning.value = false
     inflow.value = 0
     windowSentiments.value = []
     simError.value = null
     topicFilter.value = null
+    selectedComment.value = null
     // 切走时停止该数据集的模拟器（重新播放从头开始）；无数据集时跳过空 id 请求
     onCleanup(() => {
       if (!id) return

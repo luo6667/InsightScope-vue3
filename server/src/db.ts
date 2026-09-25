@@ -79,10 +79,29 @@ async function ensureCommentDedupIndex(): Promise<void> {
 //这个数据集id怎么创建的？在导入数据时，创建数据集时，会自动生成一个随机字符串作为数据集id
 //他是怎么生成的？答案：是用 uuid 函数生成的，返回一个 36进制字符串，长度为32，包含字母和数字
 
+/**
+ * 幂等补充 alert_rules.windowMin 列（评论量规则的「最近 N 分钟」窗口）。
+ *
+ * sequelize.sync() 只建缺失的表、不会给已存在的表加列，所以老库需要这条 ALTER；
+ * 新库由 sync() 按 models.ts 直接建好，这里查到列已存在就跳过。
+ * NOT NULL DEFAULT 10 让历史规则自动获得 10 分钟窗口（与模型默认值一致）。
+ */
+async function ensureAlertRuleWindowColumn(): Promise<void> {
+  const [rows] = await sequelize.query(
+    `SELECT COUNT(*) AS n FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'alert_rules' AND column_name = 'windowMin'`
+  );
+  const exists = Number((rows as { n: number }[])[0]?.n ?? 0) > 0;
+  if (exists) return;
+  await sequelize.query(`ALTER TABLE alert_rules ADD COLUMN windowMin INT NOT NULL DEFAULT 10`);
+  console.log("[mysql] alert_rules 已补充 windowMin 列（默认 10 分钟）");
+}
+
 //连接 MySQL + 建库建表 + 索引（应用启动时调用一次） */
 export async function initDb(): Promise<void> {
   await ensureDatabase();
   await sequelize.authenticate();
   await sequelize.sync(); // 创建缺失的表（模型定义见 models.ts）
   await ensureCommentDedupIndex();
+  await ensureAlertRuleWindowColumn();
 }
