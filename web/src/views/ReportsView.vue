@@ -12,7 +12,7 @@
  *   datasets 引用：Vue 里 `datasets` 是稳定的 ref，读取它不会给 watch 增加依赖；
  * - `{data: datasets}` 直接解构 vue-query 的 ref，`stats.value` 在模板里自动解包。
  */
-import { Clock, FileDown, FileText, Loader2, Trash2, Wand2 } from 'lucide-vue-next'
+import { Clock, FileDown, FileText, Loader2, SquareStop, Trash2, Wand2 } from 'lucide-vue-next'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { toast } from 'vue-sonner'
 
@@ -85,6 +85,8 @@ const abortRef = shallowRef<AbortController | null>(null)
 // 生成代数：切换数据集/重复点击时使旧流失效，防止增量错写进新数据集
 const genIdRef = ref(0)
 const genDatasetRef = ref('')
+// 用户点了「停止生成」：本次生成不算完成，已生成的内容保留在页面上但不写入历史
+const stopped = ref(false)
 
 watch(
   datasetId,
@@ -108,6 +110,7 @@ const generate = async () => {
   const curDataset = datasetId.value
   generating.value = true
   error.value = null
+  stopped.value = false
   report.value = ''
   activeHistory.value = null
   const ac = new AbortController()
@@ -136,8 +139,21 @@ const generate = async () => {
   }
 }
 
+/** 手动停止流式生成：中止上游请求（后端同时会中断对模型服务的连接），已生成内容保留在页面上 */
+const stop = () => {
+  if (!generating.value) return
+  stopped.value = true
+  abortRef.value?.abort()
+}
+
 // 生成完成时自动存入历史（绑定生成时所属数据集，防止切数据集后错存）
 watch([report, generating, datasetId], () => {
+  // 用户中途点了「停止生成」：页面保留半成品但不写历史、也不提示「已生成」
+  if (stopped.value && !generating.value) {
+    stopped.value = false
+    toast.info('已停止生成，当前内容保留在页面上（可手动导出）')
+    return
+  }
   if (!report.value || generating.value || !datasetId.value) return
   if (genDatasetRef.value !== datasetId.value) return // 本次报告属于其他数据集，不写入当前数据集历史
   const datasetName = datasets.value?.find((d) => d.id === datasetId.value)?.name ?? '数据集'
@@ -211,10 +227,17 @@ const historyTitle = computed(() => {
       <!-- 生成区 -->
       <div>
         <div v-if="datasetId" class="flex flex-wrap items-center gap-2">
-          <Button variant="primary" :disabled="!stats || generating" @click="generate">
-            <Loader2 v-if="generating" :size="15" class="animate-spin" />
-            <Wand2 v-else :size="15" />
-            {{ generating ? '生成中…' : '生成舆情周报' }}
+          <Button v-if="!generating" variant="primary" :disabled="!stats" @click="generate">
+            <Wand2 :size="15" />
+            生成舆情周报
+          </Button>
+          <Button v-else variant="primary" disabled>
+            <Loader2 :size="15" class="animate-spin" />
+            生成中…
+          </Button>
+          <Button v-if="generating" variant="outline" @click="stop">
+            <SquareStop :size="15" />
+            停止生成
           </Button>
           <Button v-if="report" variant="outline" @click="exportMd(report)">
             <FileDown :size="15" />

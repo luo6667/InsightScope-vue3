@@ -15,6 +15,7 @@ import {
   Database,
   FileText,
   Gauge,
+  MessageSquare,
   Moon,
   Radar,
   Settings,
@@ -35,12 +36,15 @@ interface NavItem {
   mobile?: boolean
 }
 
+// 前三项属于「数据」分组（SiteLayout 里 nav.slice(0, 3)），其余归「洞察」；
+// 评论浏览紧跟「导入数据」，同属数据链路（导入 → 浏览/检索 → 监控）。
 const nav: NavItem[] = [
   { to: '/datasets', label: '数据集', icon: Database, mobile: true },
   { to: '/import', label: '导入数据', icon: Upload },
+  { to: '/comments', label: '评论浏览', icon: MessageSquare, mobile: true },
   { to: '/dashboard', label: '监控台', icon: Gauge, mobile: true },
   { to: '/analysis', label: '智能分析', icon: BrainCircuit, mobile: true },
-  { to: '/reports', label: '舆情报告', icon: FileText, mobile: true },
+  { to: '/reports', label: '舆情报告', icon: FileText },
   { to: '/alerts', label: '告警中心', icon: Bell, mobile: true },
 ]
 
@@ -76,7 +80,7 @@ const isActive = (to: string) => route.path === to
       </div>
       <div class="space-y-1 px-2.5">
         <IslandItem
-          v-for="item in nav.slice(0, 2)"
+          v-for="item in nav.slice(0, 3)"
           :key="item.to"
           :to="item.to"
           :label="item.label"
@@ -92,7 +96,7 @@ const isActive = (to: string) => route.path === to
       </div>
       <div class="space-y-1 px-2.5">
         <IslandItem
-          v-for="item in nav.slice(2)"
+          v-for="item in nav.slice(3)"
           :key="item.to"
           :to="item.to"
           :label="item.label"

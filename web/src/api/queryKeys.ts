@@ -22,6 +22,13 @@ export const queryKeys = {
   /** 某数据集评论列表的具体缓存键（查询用；params 参与 key） */
   comments: (datasetId: string, params?: Record<string, unknown>) =>
     ['comments', datasetId, JSON.stringify(params ?? {})] as const,
+  /**
+   * 无限滚动评论列表的缓存键（与 comments 同前缀，所以 commentsAll 的失效能一并覆盖它）。
+   * 只把**筛选条件**放进 key，不含 page：页码是 infiniteQuery 的 pageParam，
+   * 全部页共享同一个 key，才能让「切换筛选 → 重新从第一页累积」自然发生。
+   */
+  commentsInfinite: (datasetId: string, filters?: Record<string, unknown>) =>
+    ['comments', datasetId, 'infinite', JSON.stringify(filters ?? {})] as const,
 
   /** 最新分析任务 */
   job: (datasetId: string) => ['job', datasetId] as const,

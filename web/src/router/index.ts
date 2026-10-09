@@ -6,6 +6,7 @@ import { createRouter, createWebHistory } from 'vue-router'
  * 对应关系（旧 app/(site)/<name>/page.tsx 只是 200B 的薄壳，真正内容在 src/views/*.tsx）：
  *   /datasets  → views/DatasetsView.vue
  *   /import    → views/ImportView.vue
+ *   /comments  → views/CommentsView.vue（评论浏览：无限滚动 + 虚拟滚动）
  *   /dashboard → views/DashboardView.vue
  *   /analysis  → views/AnalysisView.vue
  *   /reports   → views/ReportsView.vue
@@ -31,6 +32,12 @@ const router = createRouter({
       name: 'import',
       component: () => import('@/views/ImportView.vue'),
       meta: { title: '导入数据' },
+    },
+    {
+      path: '/comments',
+      name: 'comments',
+      component: () => import('@/views/CommentsView.vue'),
+      meta: { title: '评论浏览' },
     },
     {
       path: '/dashboard',

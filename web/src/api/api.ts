@@ -39,11 +39,15 @@ export const pullFeedNow = (id: string) =>
   post<{ ok: boolean; count: number; skipped?: boolean }>(`/datasets/${id}/feed/pull`)
 
 // 评论与统计
+/** 评论分页响应的载荷（供 useComments / useInfiniteComments 复用同一个类型） */
+export interface CommentsPage {
+  total: number
+  page: number
+  limit: number
+  comments: CommentRow[]
+}
 export const listComments = (datasetId: string, params?: Record<string, unknown>) =>
-  get<{ total: number; page: number; limit: number; comments: CommentRow[] }>(
-    `/datasets/${datasetId}/comments`,
-    params,
-  )
+  get<CommentsPage>(`/datasets/${datasetId}/comments`, params)
 export const getStats = (datasetId: string, params?: Record<string, unknown>) =>
   get<DatasetStats>(`/datasets/${datasetId}/stats`, params)
 
