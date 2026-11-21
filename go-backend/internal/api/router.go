@@ -18,6 +18,7 @@ import (
 type Server struct {
 	DB          *gorm.DB
 	AccessToken string
+	HTTPClient  *http.Client
 }
 
 type datasetListRow struct {
@@ -64,6 +65,7 @@ func (s Server) Router() *gin.Engine {
 	api.DELETE("/alerts/rules/:id", s.deleteRule)
 	api.GET("/alerts", s.listAlerts)
 	api.PATCH("/alerts/:id/ack", s.ackAlert)
+	api.POST("/ai", s.streamAI)
 	return r
 }
 
