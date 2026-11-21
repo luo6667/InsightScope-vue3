@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatal("MySQL connection failed: ", err)
 	}
-	if !db.Migrator().HasTable("analysis_job_secrets") {
+	if !db.Migrator().HasTable("analysis_job_secrets") || !db.Migrator().HasTable("dataset_versions") {
 		log.Fatal("run go run ./cmd/migrate before starting the API")
 	}
 	redisClient := redis.NewClient(&redis.Options{Addr: env("REDIS_ADDR", "127.0.0.1:6379"), Password: os.Getenv("REDIS_PASSWORD")})
@@ -72,7 +72,7 @@ func main() {
 	go (realtime.Bus{Redis: redisClient, Socket: socket}).Run(busContext)
 	publisher := realtime.Publisher{Redis: redisClient}
 	server := api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins,
-		Credentials: credentials, Queue: tasks.Client{Queue: queue}, FeedQueue: tasks.Client{Queue: queue}, Events: publisher, FeedRedis: redisClient, Alerts: &alerts.Engine{DB: db, Events: publisher}, RateLimitPerMin: rateLimit, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
+		Credentials: credentials, Queue: tasks.Client{Queue: queue}, FeedQueue: tasks.Client{Queue: queue}, Events: publisher, FeedRedis: redisClient, StatsRedis: redisClient, Alerts: &alerts.Engine{DB: db, Events: publisher}, RateLimitPerMin: rateLimit, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
 	server.Simulator = &api.Simulator{DB: db, Events: publisher, Alerts: server.Alerts}
 	log.Fatal(server.Router().Run(":" + port))
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"insightscope/go-backend/internal/data"
 )
@@ -80,13 +81,23 @@ func (s Server) updateComment(c *gin.Context) {
 		}
 		changes["topics"] = string(topics)
 	}
-	result := s.DB.WithContext(c.Request.Context()).Model(&data.Comment{}).
-		Where("id = ? AND datasetId = ?", commentID, datasetID).Updates(changes)
-	if result.Error != nil {
+	var changed int64
+	err = s.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&data.Comment{}).Where("id = ? AND datasetId = ?", commentID, datasetID).Updates(changes)
+		if result.Error != nil {
+			return result.Error
+		}
+		changed = result.RowsAffected
+		if changed > 0 && s.StatsRedis != nil {
+			return data.BumpDataVersion(tx, strconv.FormatUint(datasetID, 10))
+		}
+		return nil
+	})
+	if err != nil {
 		c.JSON(500, gin.H{"error": "服务器内部错误"})
 		return
 	}
-	if result.RowsAffected == 0 {
+	if changed == 0 {
 		c.JSON(404, gin.H{"error": "评论不存在"})
 		return
 	}

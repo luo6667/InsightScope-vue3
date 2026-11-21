@@ -37,6 +37,11 @@ func (s Server) deleteDataset(c *gin.Context) {
 				return err
 			}
 		}
+		if s.StatsRedis != nil {
+			if err := tx.Exec("DELETE FROM dataset_versions WHERE datasetId = ?", datasetID).Error; err != nil {
+				return err
+			}
+		}
 		return tx.Delete(&dataset).Error
 	})
 	if missing {

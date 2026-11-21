@@ -31,6 +31,7 @@ type Server struct {
 	FeedQueue       tasks.FeedEnqueuer
 	Events          analysis.EventPublisher
 	FeedRedis       *redis.Client
+	StatsRedis      *redis.Client
 	Alerts          *alerts.Engine
 	Simulator       *Simulator
 	RateLimitPerMin int

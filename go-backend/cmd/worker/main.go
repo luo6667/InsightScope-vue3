@@ -34,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatal("MySQL connection failed: ", err)
 	}
-	if !db.Migrator().HasTable("analysis_job_secrets") {
+	if !db.Migrator().HasTable("analysis_job_secrets") || !db.Migrator().HasTable("dataset_versions") {
 		log.Fatal("run go run ./cmd/migrate before starting the worker")
 	}
 	credentials, err := analysis.NewCredentials(os.Getenv("ANALYSIS_ENCRYPTION_KEY"))
@@ -51,11 +51,11 @@ func main() {
 		log.Fatal("Redis connection failed: ", err)
 	}
 	publisher := realtime.Publisher{Redis: redisClient}
-	worker := analysis.Worker{DB: db, Credentials: credentials, Events: publisher, Locks: analysis.RedisLocks{Redis: redisClient}, Alerts: &alerts.Engine{DB: db, Events: publisher}}
+	worker := analysis.Worker{DB: db, Credentials: credentials, Events: publisher, Locks: analysis.RedisLocks{Redis: redisClient}, Alerts: &alerts.Engine{DB: db, Events: publisher}, CacheVersioning: true}
 	server := asynq.NewServer(asynq.RedisClientOpt{Addr: redisAddr, Password: redisPassword}, asynq.Config{Concurrency: 4, Queues: map[string]int{"analysis": 1, "feed": 1}})
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.AnalysisType, worker.Handle)
-	feedWorker := api.Server{DB: db, FeedRedis: redisClient, Events: publisher, Alerts: worker.Alerts}
+	feedWorker := api.Server{DB: db, FeedRedis: redisClient, StatsRedis: redisClient, Events: publisher, Alerts: worker.Alerts}
 	mux.HandleFunc(tasks.FeedType, feedWorker.HandleFeed)
 	log.Fatal(server.Run(mux))
 }

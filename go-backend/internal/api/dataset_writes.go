@@ -357,7 +357,13 @@ func (s Server) createDataset(c *gin.Context) {
 			}
 			rows = append(rows, normalizedImport(raw, strconv.FormatUint(dataset.ID, 10), platform, ts))
 		}
-		return tx.CreateInBatches(rows, 500).Error
+		if err := tx.CreateInBatches(rows, 500).Error; err != nil {
+			return err
+		}
+		if s.StatsRedis != nil {
+			return data.BumpDataVersion(tx, strconv.FormatUint(dataset.ID, 10))
+		}
+		return nil
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})

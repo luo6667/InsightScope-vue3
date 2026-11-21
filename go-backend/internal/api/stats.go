@@ -1,10 +1,16 @@
 package api
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -57,6 +63,23 @@ func (s Server) getStats(c *gin.Context) {
 			c.JSON(500, gin.H{"error": "服务器内部错误"})
 		}
 		return
+	}
+	cacheKey := ""
+	if s.StatsRedis != nil {
+		version, err := data.CurrentDataVersion(s.DB.WithContext(c.Request.Context()), c.Param("id"))
+		if err != nil {
+			c.JSON(500, gin.H{"error": "服务器内部错误"})
+			return
+		}
+		fingerprint := sha256.Sum256([]byte(c.Request.URL.RawQuery))
+		cacheKey = "insight:stats:v1:" + c.Param("id") + ":" + strconv.FormatUint(version, 10) + ":" + hex.EncodeToString(fingerprint[:])
+		cacheCtx, cancel := context.WithTimeout(c.Request.Context(), 200*time.Millisecond)
+		cached, err := s.StatsRedis.Get(cacheCtx, cacheKey).Bytes()
+		cancel()
+		if err == nil {
+			c.Data(http.StatusOK, "application/json; charset=utf-8", cached)
+			return
+		}
 	}
 	query := s.DB.WithContext(c.Request.Context()).Model(&data.Comment{}).Where("datasetId = ?", id)
 	if hasFrom {
@@ -130,6 +153,17 @@ func (s Server) getStats(c *gin.Context) {
 	for _, row := range contentRows {
 		contents = append(contents, row.Content)
 	}
-	c.JSON(http.StatusOK, gin.H{"total": len(rows), "analyzed": analyzed, "sentiment": sentiment,
-		"topics": topicList, "keywords": analysis.CountKeywords(contents, 20, custom), "trend": trendList})
+	payload := gin.H{"total": len(rows), "analyzed": analyzed, "sentiment": sentiment,
+		"topics": topicList, "keywords": analysis.CountKeywords(contents, 20, custom), "trend": trendList}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "服务器内部错误"})
+		return
+	}
+	if cacheKey != "" {
+		cacheCtx, cancel := context.WithTimeout(c.Request.Context(), 200*time.Millisecond)
+		_ = s.StatsRedis.Set(cacheCtx, cacheKey, encoded, 5*time.Minute).Err()
+		cancel()
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", encoded)
 }

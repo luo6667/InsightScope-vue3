@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -43,7 +44,7 @@ func TestMySQLContractWithOriginalSchema(t *testing.T) {
 	}
 	client := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer client.Close()
-	server := Server{DB: db, FeedRedis: client, Alerts: &alerts.Engine{DB: db}}
+	server := Server{DB: db, FeedRedis: client, StatsRedis: client, Alerts: &alerts.Engine{DB: db}}
 
 	created := requestJSON(server, http.MethodPost, "/api/datasets", `{"name":"Go contract imported","comments":[{"id":"one","text":"差评","name":"Ada","sentiment":"neg","topics":["产品"]},{"id":"two","text":"好评","name":"Bo","sentiment":"pos"}]}`)
 	if created.Code != 201 {
@@ -65,6 +66,36 @@ func TestMySQLContractWithOriginalSchema(t *testing.T) {
 	if stats.Code != 200 {
 		t.Fatalf("stats: %d %s", stats.Code, stats.Body.String())
 	}
+	var importedComment data.Comment
+	beforeVersion, err := data.CurrentDataVersion(db, imported.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("datasetId = ? AND sourceId = ?", imported.ID, "one").First(&importedComment).Error; err != nil {
+		t.Fatal(err)
+	}
+	changed := requestJSON(server, http.MethodPatch, "/api/datasets/"+imported.ID+"/comments/"+strconv.FormatUint(importedComment.ID, 10), `{"sentiment":"neu","topics":["新话题"]}`)
+	if changed.Code != 200 {
+		t.Fatalf("patch: %d %s", changed.Code, changed.Body.String())
+	}
+	afterVersion, err := data.CurrentDataVersion(db, imported.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterVersion <= beforeVersion {
+		t.Fatalf("cache version did not advance: %d -> %d", beforeVersion, afterVersion)
+	}
+	updatedStats := requestJSON(server, http.MethodGet, "/api/datasets/"+imported.ID+"/stats", "")
+	if updatedStats.Code != 200 || !strings.Contains(updatedStats.Body.String(), "新话题") {
+		t.Fatalf("cached stats invalidation: %d %s", updatedStats.Code, updatedStats.Body.String())
+	}
+	server.StatsRedis = redis.NewClient(&redis.Options{Addr: "127.0.0.1:16380", MaxRetries: 0, DialTimeout: 50 * time.Millisecond})
+	defer server.StatsRedis.Close()
+	fallbackStats := requestJSON(server, http.MethodGet, "/api/datasets/"+imported.ID+"/stats", "")
+	if fallbackStats.Code != 200 || !strings.Contains(fallbackStats.Body.String(), "新话题") {
+		t.Fatalf("stats Redis fallback: %d %s", fallbackStats.Code, fallbackStats.Body.String())
+	}
+	server.StatsRedis = client
 
 	feedSource := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`[{"id":"source-1","content":"敏感词 出现","author":"Ada","topics":["话题"]}]`))
@@ -139,7 +170,7 @@ func TestMySQLContractWithOriginalSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker := analysis.Worker{DB: db, Credentials: cipher, Model: analysis.LLM{Client: &http.Client{}}, Locks: analysis.RedisLocks{Redis: client}}
+	worker := analysis.Worker{DB: db, Credentials: cipher, Model: analysis.LLM{Client: &http.Client{}}, Locks: analysis.RedisLocks{Redis: client}, CacheVersioning: true}
 	probe := worker.Model.Analyze(context.Background(), analysis.AIConfig{APIKey: "test-key", BaseURL: modelServer.URL, Model: "test-model"}, []string{"客服很慢"})
 	if len(probe) != 1 || probe[0] == nil {
 		t.Fatalf("fake model response was not parsed; hits=%d", modelHits.Load())

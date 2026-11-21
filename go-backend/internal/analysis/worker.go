@@ -23,12 +23,13 @@ type EventPublisher interface {
 }
 
 type Worker struct {
-	DB          *gorm.DB
-	Credentials Credentials
-	Model       LLM
-	Events      EventPublisher
-	Locks       LockStore
-	Alerts      *alerts.Engine
+	DB              *gorm.DB
+	Credentials     Credentials
+	Model           LLM
+	Events          EventPublisher
+	Locks           LockStore
+	Alerts          *alerts.Engine
+	CacheVersioning bool
 }
 
 func (w Worker) emit(ctx context.Context, job data.AnalysisJob, status string) {
@@ -107,6 +108,11 @@ func (w Worker) processBatch(ctx context.Context, id uint64, items []data.Commen
 			written += int(updated.RowsAffected)
 		}
 		job.Processed += written
+		if written > 0 && w.CacheVersioning {
+			if err := data.BumpDataVersion(tx, job.DatasetID); err != nil {
+				return err
+			}
+		}
 		if err := tx.Model(&job).Update("processed", job.Processed).Error; err != nil {
 			return err
 		}

@@ -135,7 +135,13 @@ func (s Server) resetAnalysis(c *gin.Context) {
 		}
 		change := tx.Model(&data.Comment{}).Where("datasetId = ?", datasetID).Updates(map[string]any{"analyzed": false, "sentiment": "neu", "sentimentScore": 0, "topics": "[]", "keywords": "[]"})
 		affected = change.RowsAffected
-		return change.Error
+		if change.Error != nil {
+			return change.Error
+		}
+		if affected > 0 && s.StatsRedis != nil {
+			return data.BumpDataVersion(tx, datasetID)
+		}
+		return nil
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})

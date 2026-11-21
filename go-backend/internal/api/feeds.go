@@ -291,7 +291,15 @@ func (s Server) readFeed(ctx context.Context, ds data.Dataset) (int, error) {
 		if comment.Sentiment != nil {
 			row.Analyzed = true
 		}
-		if err := s.DB.WithContext(ctx).Create(&row).Error; err != nil {
+		if err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+			if s.StatsRedis != nil {
+				return data.BumpDataVersion(tx, strconv.FormatUint(ds.ID, 10))
+			}
+			return nil
+		}); err != nil {
 			return 0, err
 		}
 		inserted++

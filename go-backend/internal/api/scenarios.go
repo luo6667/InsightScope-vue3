@@ -153,7 +153,13 @@ func (s Server) createScenarioDataset(c *gin.Context, body createDatasetBody) {
 		for i := range rows {
 			rows[i].DatasetID = strconv.FormatUint(dataset.ID, 10)
 		}
-		return tx.CreateInBatches(rows, 500).Error
+		if err := tx.CreateInBatches(rows, 500).Error; err != nil {
+			return err
+		}
+		if s.StatsRedis != nil {
+			return data.BumpDataVersion(tx, strconv.FormatUint(dataset.ID, 10))
+		}
+		return nil
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
