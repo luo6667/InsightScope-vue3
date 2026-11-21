@@ -47,5 +47,8 @@ func (s Server) deleteDataset(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
 		return
 	}
+	if s.Simulator != nil {
+		s.Simulator.stop(id)
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

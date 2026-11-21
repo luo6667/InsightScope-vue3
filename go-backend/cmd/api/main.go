@@ -71,6 +71,7 @@ func main() {
 	publisher := realtime.Publisher{Redis: redisClient}
 	server := api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins,
 		Credentials: credentials, Queue: tasks.Client{Queue: queue}, Events: publisher, FeedRedis: redisClient, Alerts: &alerts.Engine{DB: db, Events: publisher}, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
+	server.Simulator = &api.Simulator{DB: db, Events: publisher, Alerts: server.Alerts}
 	go server.RunFeedScheduler(busContext)
 	log.Fatal(server.Router().Run(":" + port))
 }

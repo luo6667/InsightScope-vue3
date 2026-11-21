@@ -31,6 +31,7 @@ type Server struct {
 	Events          analysis.EventPublisher
 	FeedRedis       *redis.Client
 	Alerts          *alerts.Engine
+	Simulator       *Simulator
 }
 
 type datasetListRow struct {
@@ -88,6 +89,9 @@ func (s Server) Router() *gin.Engine {
 	api.POST("/datasets/:id/feed/start", s.startFeed)
 	api.POST("/datasets/:id/feed/stop", s.stopFeed)
 	api.POST("/datasets/:id/feed/pull", s.pullFeed)
+	api.POST("/datasets/:id/simulate/start", s.startSimulation)
+	api.POST("/datasets/:id/simulate/stop", s.stopSimulation)
+	api.POST("/datasets/:id/simulate/speed", s.changeSimulationSpeed)
 	api.GET("/alerts/rules", s.listRules)
 	api.POST("/alerts/rules", s.createRule)
 	api.PATCH("/alerts/rules/:id", s.updateRule)

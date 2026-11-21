@@ -27,6 +27,9 @@
 | `POST /api/datasets/:id/feed/start` | 启用定时抓取并立即抓取一次 |
 | `POST /api/datasets/:id/feed/stop` | 停止后续定时抓取 |
 | `POST /api/datasets/:id/feed/pull` | 立即抓取，返回新增条数及是否因互斥锁跳过 |
+| `POST /api/datasets/:id/simulate/start` | 按时间顺序重放评论，速度默认 5、范围 1–20 |
+| `POST /api/datasets/:id/simulate/stop` | 停止当前重放并发布状态事件 |
+| `POST /api/datasets/:id/simulate/speed` | 播放期间调整速度 |
 | `GET /api/alerts/rules` | 返回告警规则，可按数据集筛选 |
 | `POST /api/alerts/rules` | 创建告警规则 |
 | `PATCH /api/alerts/rules/:id` | 修改告警规则 |
@@ -41,4 +44,4 @@
 
 Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。API 已订阅 Redis 实时事件频道并转发到数据集房间，后台分析 Worker 和抓取流程会发布进度及状态事件。
 
-后续仍需完成模拟、真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。同一分析任务由 Redis 持有者锁互斥，锁定期自动续租且仅持有者可释放，评论写回仍以数据库条件更新保证幂等。API 启动时会清理已结束任务的密文，并重新投递仍有密文的待处理或运行中任务，处理数据库提交后进程退出导致的漏投递。抓取由 API 内的定时检查恢复，使用 Redis 数据集锁防止多实例和手动抓取重叠；`FEED_MAX_ITEMS` 默认 2000，`ALLOW_PRIVATE_FEED_URL=0` 可启用严格 URL 检查。抓取入库与 AI 分析写回后会按原规则计算负面率、敏感关键词、评论量告警和 Z-score 异常，并发布 `alert:new` 事件。
+后续仍需完成真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。同一分析任务由 Redis 持有者锁互斥，锁定期自动续租且仅持有者可释放，评论写回仍以数据库条件更新保证幂等。API 启动时会清理已结束任务的密文，并重新投递仍有密文的待处理或运行中任务，处理数据库提交后进程退出导致的漏投递。抓取由 API 内的定时检查恢复，使用 Redis 数据集锁防止多实例和手动抓取重叠；`FEED_MAX_ITEMS` 默认 2000，`ALLOW_PRIVATE_FEED_URL=0` 可启用严格 URL 检查。抓取入库与 AI 分析写回后会按原规则计算负面率、敏感关键词、评论量告警和 Z-score 异常，并发布 `alert:new` 事件。模拟器在 API 进程内按时间线播放已有评论，停止或重启会取消旧播放链。
