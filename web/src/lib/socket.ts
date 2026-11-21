@@ -15,7 +15,7 @@ let socket: Socket | null = null
 
 /**
  * socket.io 连接地址：
- * Vite dev 的 /api 代理不转发 WebSocket，socket 必须直连 Express（不走 /api 代理）。
+ * Vite dev 的 /api 代理不转发 WebSocket，socket 必须直连 Go API（不走 /api 代理）。
  * 开发默认直连本地后端 5176；生产同域反代时设 VITE_SOCKET_URL=""（同源）即可。
  */
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:5176'

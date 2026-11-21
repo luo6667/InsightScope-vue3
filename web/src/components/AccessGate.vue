@@ -2,7 +2,7 @@
 /**
  * 📘 AccessGate.vue —— 取代 components/AccessGate.tsx
  *
- * 访问口令门禁（决策③A：真正的鉴权在后端 Express 的 requireAccessToken，这里只是体验层）：
+ * 访问口令门禁（真正的鉴权在 Go API，这里只是体验层）：
  * - 启动时探测 GET /api/auth/status：后端未启用认证（开发模式）→ 直接放行；
  * - 已启用且无口令 → 全屏弹层要求输入 ACCESS_TOKEN；
  * - 任一 API 返回 401 或 socket 握手被拒（unauthorized）→ 弹层要求重新输入；

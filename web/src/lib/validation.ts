@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * 前端表单校验 schema（与后端 server/src/validation.ts 保持一致）。
+ * 前端表单校验 schema（与 Go API 的请求校验保持一致）。
  * 前后端各自维护：改后端校验时同步改这里（或抽成共享包）。
  * 校验失败统一走 zod 的 safeParse，错误信息在表单字段旁展示。
  */

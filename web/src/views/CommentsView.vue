@@ -19,8 +19,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import type { CommentRow, Sentiment } from '@/api/types'
 import CommentModal from '@/components/CommentModal.vue'
+import { SENTIMENT } from '@/components/dashboard/options'
 import DatasetPicker from '@/components/DatasetPicker.vue'
-import VirtualList from '@/components/VirtualList.vue'
 import {
   Badge,
   Button,
@@ -31,7 +31,7 @@ import {
   Select,
   Skeleton,
 } from '@/components/ui'
-import { SENTIMENT } from '@/components/dashboard/options'
+import VirtualList from '@/components/VirtualList.vue'
 import { useCurrentDataset } from '@/composables/useCurrentDataset'
 import { useDatasets, useInfiniteComments } from '@/composables/useData'
 import { useInvalidateDataset } from '@/composables/useInvalidateDataset'

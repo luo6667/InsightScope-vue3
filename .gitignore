@@ -23,6 +23,9 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# 本地数据库备份（可能包含用户数据）
+.backups/
+
 # 编辑器
 .vscode/
 .idea/

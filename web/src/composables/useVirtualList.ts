@@ -114,14 +114,14 @@ export function useVirtualList<T>(options: UseVirtualListOptions<T>) {
   }
 
   const totalHeight = computed(() => {
-    revision.value
+    void revision.value
     const off = offsets.value
     const hs = heights.value
     return off.length ? (off[off.length - 1] as number) + (hs[hs.length - 1] as number) : 0
   })
 
   const virtualItems = computed<VirtualItem[]>(() => {
-    revision.value
+    void revision.value
     const off = offsets.value
     if (!off.length) return []
 

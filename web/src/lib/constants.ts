@@ -10,12 +10,12 @@ export const DATASETS_POLL_MS = 8000
 export const ALERTS_POLL_MS = 5000
 /** 分析任务进行中（pending/running/paused）的轮询间隔 */
 export const ANALYSIS_JOB_POLL_MS = 3000
-/** 分析并发默认值（与后端 server/src/validation.ts 的 default(6) 保持一致） */
+/** 分析并发默认值（与 Go API 的默认值 6 保持一致） */
 export const ANALYSIS_CONCURRENCY = 6
 
 /**
  * 评论无限滚动每页条数。
- * 后端 limit 上限是 100（server/src/validation.ts 的 pagination），这里取 50：
+ * 后端 limit 上限是 100，这里取 50：
  * 配合虚拟滚动，每页 50 条只增量渲染可视区的十几项，一次请求的体量也够小。
  */
 export const COMMENTS_PAGE_SIZE = 50

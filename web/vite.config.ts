@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       proxy: {
-        // 对应 Next 的 rewrites：dev 下 /api/* 代理到 Express(5176)
+        // 对应 Next 的 rewrites：dev 下 /api/* 代理到 Go API(5176)
         '/api': {
           target: apiTarget,
           changeOrigin: true,

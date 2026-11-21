@@ -1,6 +1,6 @@
-# Go 后端迁移：第一阶段
+# Go 后端运行说明
 
-本目录正在按 [迁移计划](../GO_REDIS_MIGRATION_PLAN.md) 替换 `server/`。目前实现了数据集与评论的部分接口、告警接口、健康检查、鉴权状态和 Socket.IO 连接；前端仍由现有 Node 后端服务，暂时不要将 API 代理指向 Go。`go test ./...` 可以验证当前已实现的接口行为。
+Go + Gin + GORM 后端使用原有 MySQL 表，Redis 负责 Asynq 队列、统计缓存、实时广播、模拟状态和限流。Vue 的接口路径与 Socket.IO 客户端保持原样。API、Worker、Scheduler 是三个独立进程；Vue 仍用 Node.js 运行 Vite。迁移和验证详情见 [验证记录](VERIFICATION.md)。
 
 当前接口：
 
@@ -38,7 +38,34 @@
 | `PATCH /api/alerts/:id/ack` | 确认告警 |
 | `POST /api/ai` | 使用用户配置的模型转发 SSE 流式报告 |
 
-本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ANALYSIS_ENCRYPTION_KEY`（32 字节密钥的 Base64 编码）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）、`RATE_LIMIT_PER_MIN`（默认 0，关闭写接口限流）和 `PORT`（默认 5176），然后分别执行 `go run ./cmd/api`、`go run ./cmd/worker` 与 `go run ./cmd/scheduler`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
+## 本地启动（PowerShell）
+
+先启动 MySQL 和 Redis，按 [.env.example](.env.example) 设置环境变量。首次使用现有数据库前先用 `mysqldump --single-transaction` 备份；迁移仅新增 `schema_migrations`、`analysis_job_secrets` 和 `dataset_versions`，不会重建旧表。示例：
+
+```powershell
+cd go-backend
+$env:ANALYSIS_ENCRYPTION_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+go run ./cmd/migrate
+```
+
+请把生成的密钥保存在本机安全位置，并在每个终端设置**同一个** `ANALYSIS_ENCRYPTION_KEY`；更换密钥会使未完成分析任务的临时密文无法解密。其余环境变量按需要设置。分别在三个终端运行：
+
+```powershell
+cd go-backend
+go run ./cmd/api
+```
+
+```powershell
+cd go-backend
+go run ./cmd/worker
+```
+
+```powershell
+cd go-backend
+go run ./cmd/scheduler
+```
+
+另开终端在 `web/` 运行 `npm install`、`npm run dev`，访问 `http://localhost:3000`。Vite 开发代理和 Socket.IO 默认连接 Go API 的 `http://localhost:5176`。`GET /healthz` 检查 MySQL，`GET /readyz` 同时检查 MySQL 和 Redis。
 
 `NODE_ENV=production` 或 `GO_ENV=production` 时，API 会拒绝默认 MySQL 密码、缺少 CORS 来源、关闭限流或短于 16 位的访问口令；与原 Node 的生产配置门槛一致。
 
@@ -46,7 +73,7 @@
 
 Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。API 已订阅 Redis 实时事件频道并转发到数据集房间，后台分析 Worker 和抓取流程会发布进度及状态事件。
 
-后续仍需完成全面的真实 MySQL 契约回归、Redis 故障测试和前端全流程验收；这些完成前不能移除 Node 后端。
+Scheduler 每分钟投递到期的抓取任务，并从 MySQL 补投 Redis 中丢失的未完成分析任务。补投使用固定 Asynq 任务 ID，已有任务不会重复入队。
 
 Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。同一分析任务由 Redis 持有者锁互斥，锁定期自动续租且仅持有者可释放，评论写回仍以数据库条件更新保证幂等。API 启动时会清理已结束任务的密文，并重新投递仍有密文的待处理或运行中任务，处理数据库提交后进程退出导致的漏投递。
 

@@ -53,7 +53,7 @@ export interface ScenarioInfo {
 
 /**
  * 导入评论的载荷：前端解析 CSV / 粘贴文本后提交的字段，
- * 与后端 server/src/validation.ts 的 importCommentSchema 对齐。
+ * 与 Go 后端评论导入校验保持一致。
  */
 export interface ImportComment {
   content: string

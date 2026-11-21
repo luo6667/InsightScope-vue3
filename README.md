@@ -10,8 +10,9 @@
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com)
-[![MySQL](https://img.shields.io/badge/MySQL-Sequelize-4479A1?logo=mysql&logoColor=white)](https://sequelize.org)
+[![Go](https://img.shields.io/badge/Go-Gin-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![MySQL](https://img.shields.io/badge/MySQL-GORM-4479A1?logo=mysql&logoColor=white)](https://gorm.io)
+[![Redis](https://img.shields.io/badge/Redis-Asynq-DC382D?logo=redis&logoColor=white)](https://redis.io)
 [![Socket.io](https://img.shields.io/badge/Socket.io-实时-010101?logo=socket.io&logoColor=white)](https://socket.io)
 [![ECharts](https://img.shields.io/badge/ECharts-5-AA344D?logo=apacheecharts&logoColor=white)](https://echarts.apache.org)
 
@@ -38,7 +39,7 @@ InsightScope 是一个前端为主的 AI 全栈项目，帮助产品 / 运营 / 
 - 🚨 **智能告警** — 负面率阈值 / 评论量（最近 N 分钟新增条数 ≥ 阈值，窗口 1~1440 分钟可配）/ 敏感关键词规则 + 滑动窗口 **Z-score 异常检测** + 60s 冷却防抖
 - 🖥 **可视化大盘** — 情感环形图 · 按天趋势 · 热门主题 · 关键词云四图联动
 - 📝 **AI 周报** — 五段式结构流式生成，一键导出 Markdown
-- 🔒 **安全设计** — API key 只存浏览器、仅内存不落库；可选 `ACCESS_TOKEN` 访问口令保护全部接口
+- 🔒 **安全设计** — 用户自行填写 AI API Key 与模型；浏览器设置保存在 localStorage，未完成分析任务的密钥经服务端加密暂存 MySQL，任务结束即删除；可选 `ACCESS_TOKEN` 保护接口
 - 🧩 **零门槛演示** — 内置 3 个预标注场景，免 key 开箱即用
 
 ## 🖼 界面预览
@@ -54,21 +55,22 @@ InsightScope 是一个前端为主的 AI 全栈项目，帮助产品 / 运营 / 
 | 层 | 技术 |
 |---|---|
 | 前端 | Vue 3 (Composition API) · Vite · TypeScript · Tailwind CSS 4 · Pinia · TanStack Vue Query · Element Plus · ECharts（词云）· motion-v · socket.io-client |
-| 后端 | Express · Sequelize (MySQL) · socket.io · axios |
+| 后端 | Go · Gin · GORM · MySQL · Redis · Asynq · Socket.IO |
 | AI | OpenAI 兼容 `/chat/completions`（OpenAI / DeepSeek）· SSE 流式输出 |
 
 ## 🚀 快速开始
 
-> 依赖：Node 18+ 与本地 MySQL（启动时自动建库建表，默认 `root/1234@127.0.0.1:3306/plfx`）
+> 依赖：Go、Node.js（仅用于 Vue/Vite）、MySQL 和 Redis。Go 后端沿用现有 `plfx` 数据库；迁移前先备份数据库。详细配置见 [Go 后端运行说明](go-backend/README.md)。
 
-```bash
-# 1. 启动后端（http://localhost:5176）
-cd server
-npm install
-npm run dev
+```powershell
+# 在 go-backend 目录，先设置 ANALYSIS_ENCRYPTION_KEY 等环境变量
+go run ./cmd/migrate
+# 另开三个终端，分别运行：
+go run ./cmd/api
+go run ./cmd/worker
+go run ./cmd/scheduler
 
-# 2. 启动前端（http://localhost:3000，/api 由 Vite dev 代理到 5176；socket.io 直连后端）
-cd web
+# 在 web 目录运行：
 npm install
 npm run dev
 ```
@@ -80,20 +82,22 @@ npm run dev
 
 ## 🚀 生产部署（nginx 反代）
 
-三个角色：前端静态产物（由 nginx 托管）、Express（API + socket.io，5176）、nginx（入口 80）。
+前端静态产物由 nginx 托管；Go API 提供 REST、Socket.IO 与 SSE；Worker 和 Scheduler 作为后台进程运行。MySQL、Redis 和加密主密钥是后端必需配置。
 
 ```bash
 # 1. 构建前端（产物是纯静态文件，落在 web/dist/，交给 nginx 托管）
 cd web && npm run build
 
-# 2. 构建并启动后端（API + socket.io + /api/ai 流式转发）
-cd server && npm run build && npm start
+# 2. 构建后端（在 go-backend 目录）
+go build -o insight-api ./cmd/api
+go build -o insight-worker ./cmd/worker
+go build -o insight-scheduler ./cmd/scheduler
 ```
 
 前端环境变量（构建时注入，写在 `web/.env`）：`VITE_API_BASE=/api`、`VITE_SOCKET_URL=`（同源走 nginx，留空）。
 访问控制完全由后端 `ACCESS_TOKEN` 负责，前端不再持有任何构建期口令。
 
-nginx 示例（前端静态文件 + 全部 API 与 socket 都转 Express；`/api/ai` 已由 Express 提供，不再需要特殊转发）：
+nginx 示例（前端静态文件 + API 和 Socket.IO 转发到 Go API）：
 
 ```nginx
 server {
@@ -105,7 +109,7 @@ server {
   index index.html;
   location / { try_files $uri $uri/ /index.html; }
 
-  # Express API（含 /api/ai 的 SSE 流式转发）
+  # Go API（含 /api/ai 的 SSE 流式转发）
   location /api/ {
     proxy_pass http://127.0.0.1:5176;
     proxy_http_version 1.1;
@@ -125,7 +129,7 @@ server {
 }
 ```
 
-> 后端 `ACCESS_TOKEN` 启用后，所有 `/api/*`（含 `/api/ai`）统一由 Express 的 `requireAccessToken` 校验；
+> 后端 `ACCESS_TOKEN` 启用后，所有 `/api/*`（含 `/api/ai`）由 Go API 校验；
 > 前端 `AccessGate` 只做体验层——探测 `/api/auth/status` 提示输入口令，不参与真正的鉴权。
 
 ## 🧭 三分钟演示
@@ -140,12 +144,9 @@ server {
 ## 📁 目录结构
 
 ```
-├── server/               # Express + socket.io + Sequelize(MySQL)
-│   └── src/
-│       ├── models.ts     # Dataset / Comment / AnalysisJob / Alert / AlertRule
-│       ├── routes/       # datasets / comments / analysis / alerts / simulate / feeds / ai
-│       ├── services/     # 场景生成器 / Z-score 异常检测
-│       └── index.ts      # 入口（Express + socket.io + MySQL）
+├── go-backend/           # Gin API + GORM + MySQL + Redis/Asynq
+│   ├── cmd/              # api / worker / scheduler / migrate 入口
+│   └── internal/         # 业务接口、分析、告警、实时事件和迁移
 └── web/                  # Vue 3 + Vite + Tailwind CSS 4 单页应用
     └── src/
         ├── router/       # vue-router 路由表（7 个业务页面 + 兜底）
