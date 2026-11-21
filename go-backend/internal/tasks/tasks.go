@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -56,7 +57,10 @@ func (c Client) EnqueueAnalysis(ctx context.Context, jobID uint64) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Queue.EnqueueContext(ctx, task, asynq.Queue("analysis"), asynq.MaxRetry(3))
+	_, err = c.Queue.EnqueueContext(ctx, task, asynq.Queue("analysis"), asynq.MaxRetry(3), asynq.TaskID("analysis-"+strconv.FormatUint(jobID, 10)))
+	if errors.Is(err, asynq.ErrTaskIDConflict) {
+		return nil
+	}
 	return err
 }
 

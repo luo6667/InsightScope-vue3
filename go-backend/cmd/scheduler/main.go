@@ -46,5 +46,25 @@ func main() {
 	queue := asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr, Password: redisPassword})
 	defer queue.Close()
 	log.Print("feed scheduler started")
+	go func() {
+		check := func() {
+			checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if err := tasks.Recover(checkCtx, db, tasks.Client{Queue: queue}); err != nil && ctx.Err() == nil {
+				log.Printf("[analysis] scheduler recovery: %v", err)
+			}
+		}
+		check()
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				check()
+			}
+		}
+	}()
 	(api.Server{DB: db, FeedQueue: tasks.Client{Queue: queue}}).RunFeedScheduler(ctx)
 }
