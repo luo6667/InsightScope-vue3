@@ -49,5 +49,8 @@ func main() {
 	}
 	socket := realtime.NewServer(db, os.Getenv("ACCESS_TOKEN"), origins)
 	defer socket.Close(nil)
+	busContext, stopBus := context.WithCancel(context.Background())
+	defer stopBus()
+	go (realtime.Bus{Redis: redisClient, Socket: socket}).Run(busContext)
 	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}.Router().Run(":" + port))
 }
