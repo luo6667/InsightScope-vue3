@@ -28,6 +28,10 @@ func (s Server) deleteDataset(c *gin.Context) {
 			return err
 		}
 		datasetID := strconv.FormatUint(dataset.ID, 10)
+		jobIDs := tx.Model(&data.AnalysisJob{}).Select("id").Where("datasetId = ?", datasetID)
+		if err := tx.Where("jobId IN (?)", jobIDs).Delete(&data.AnalysisJobSecret{}).Error; err != nil {
+			return err
+		}
 		for _, model := range []any{&data.Comment{}, &data.AnalysisJob{}, &data.Alert{}, &data.AlertRule{}} {
 			if err := tx.Where("datasetId = ?", datasetID).Delete(model).Error; err != nil {
 				return err

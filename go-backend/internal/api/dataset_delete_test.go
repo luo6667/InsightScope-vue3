@@ -14,6 +14,7 @@ func TestDeleteDatasetRemovesRelatedRecordsAtomically(t *testing.T) {
 	server, mock := writeTestServer(t)
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .* FROM `datasets` .* FOR UPDATE").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(8))
+	mock.ExpectExec("DELETE FROM `analysis_job_secrets`").WillReturnResult(sqlmock.NewResult(0, 1))
 	for _, table := range []string{"comments", "analysis_jobs", "alerts", "alert_rules", "datasets"} {
 		mock.ExpectExec("DELETE FROM `" + table + "`").WillReturnResult(sqlmock.NewResult(0, 1))
 	}
@@ -32,6 +33,7 @@ func TestDeleteDatasetRollsBackOnFailure(t *testing.T) {
 	server, mock := writeTestServer(t)
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .* FROM `datasets` .* FOR UPDATE").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(8))
+	mock.ExpectExec("DELETE FROM `analysis_job_secrets`").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("DELETE FROM `comments`").WillReturnError(errors.New("write failed"))
 	mock.ExpectRollback()
 	w := requestJSON(server, http.MethodDelete, "/api/datasets/8", "")

@@ -20,6 +20,10 @@
 | `GET /api/datasets/:id/stats` | 情感、主题、趋势和关键词统计 |
 | `GET /api/datasets/:id/analysis` | 返回数据集最新分析任务，尚无任务时返回 `null` |
 | `POST /api/datasets/:id/analysis` | 加密保存用户配置并投递分析任务 |
+| `POST /api/datasets/:id/analysis/pause` | 暂停运行中任务 |
+| `POST /api/datasets/:id/analysis/resume` | 恢复暂停任务并重新投递 |
+| `POST /api/datasets/:id/analysis/cancel` | 取消任务并清除加密凭据 |
+| `POST /api/datasets/:id/analysis/reset` | 清除任务与分析结果并发布重置事件 |
 | `GET /api/alerts/rules` | 返回告警规则，可按数据集筛选 |
 | `POST /api/alerts/rules` | 创建告警规则 |
 | `PATCH /api/alerts/rules/:id` | 修改告警规则 |
@@ -34,4 +38,4 @@
 
 Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。API 已订阅 Redis 实时事件频道并转发到数据集房间；后台 Worker 尚未接入事件发布。
 
-后续仍需完成分析任务控制、抓取与模拟、Scheduler、告警计算、真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；运行中任务的取消动作仍需接入数据集删除流程。
+后续仍需完成分析任务互斥与恢复、抓取与模拟、Scheduler、告警计算、真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。

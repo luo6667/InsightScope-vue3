@@ -26,6 +26,7 @@ type Server struct {
 	CORSOrigins     []string
 	Credentials     analysis.Credentials
 	Queue           tasks.Enqueuer
+	Events          analysis.EventPublisher
 }
 
 type datasetListRow struct {
@@ -76,6 +77,10 @@ func (s Server) Router() *gin.Engine {
 	api.GET("/datasets/:id/stats", s.getStats)
 	api.GET("/datasets/:id/analysis", s.getAnalysisJob)
 	api.POST("/datasets/:id/analysis", s.createAnalysisJob)
+	api.POST("/datasets/:id/analysis/pause", s.pauseAnalysis)
+	api.POST("/datasets/:id/analysis/resume", s.resumeAnalysis)
+	api.POST("/datasets/:id/analysis/cancel", s.cancelAnalysis)
+	api.POST("/datasets/:id/analysis/reset", s.resetAnalysis)
 	api.GET("/alerts/rules", s.listRules)
 	api.POST("/alerts/rules", s.createRule)
 	api.PATCH("/alerts/rules/:id", s.updateRule)

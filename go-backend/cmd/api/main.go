@@ -65,5 +65,5 @@ func main() {
 	defer stopBus()
 	go (realtime.Bus{Redis: redisClient, Socket: socket}).Run(busContext)
 	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins,
-		Credentials: credentials, Queue: tasks.Client{Queue: queue}, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}.Router().Run(":" + port))
+		Credentials: credentials, Queue: tasks.Client{Queue: queue}, Events: realtime.Publisher{Redis: redisClient}, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}.Router().Run(":" + port))
 }
