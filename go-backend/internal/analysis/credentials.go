@@ -20,6 +20,9 @@ type AIConfig struct {
 type Credentials struct{ AEAD cipher.AEAD }
 
 func NewCredentials(encodedKey string) (Credentials, error) {
+	if encodedKey == "" {
+		return Credentials{}, errors.New("未设置 ANALYSIS_ENCRYPTION_KEY；请在启动 API 和 Worker 的终端设置相同的密钥")
+	}
 	key, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil || len(key) != 32 {
 		return Credentials{}, errors.New("ANALYSIS_ENCRYPTION_KEY 必须是 32 字节密钥的 Base64 编码")

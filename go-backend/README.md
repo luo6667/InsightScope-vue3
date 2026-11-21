@@ -40,25 +40,34 @@ Go + Gin + GORM 后端使用原有 MySQL 表，Redis 负责 Asynq 队列、统�
 
 ## 本地启动（PowerShell）
 
-先启动 MySQL 和 Redis，按 [.env.example](.env.example) 设置环境变量。首次使用现有数据库前先用 `mysqldump --single-transaction` 备份；迁移仅新增 `schema_migrations`、`analysis_job_secrets` 和 `dataset_versions`，不会重建旧表。示例：
+先启动 MySQL 和 Redis，按 [.env.example](.env.example) 设置环境变量。`.env.example` 只是模板，Go 进程不会自动读取它。首次使用现有数据库前先用 `mysqldump --single-transaction` 备份；迁移仅新增 `schema_migrations`、`analysis_job_secrets` 和 `dataset_versions`，不会重建旧表。迁移命令本身不需要加密密钥：
 
 ```powershell
 cd go-backend
-$env:ANALYSIS_ENCRYPTION_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
 go run ./cmd/migrate
 ```
 
-请把生成的密钥保存在本机安全位置，并在每个终端设置**同一个** `ANALYSIS_ENCRYPTION_KEY`；更换密钥会使未完成分析任务的临时密文无法解密。其余环境变量按需要设置。分别在三个终端运行：
+只生成一次密钥，在本机安全保存生成的 Base64 字符串；不要把它发送到聊天、写进 Git 或放入前端环境变量：
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+在 **API 终端和 Worker 终端分别粘贴刚才生成的同一串**，再启动进程。PowerShell 的 `$env:` 只对当前终端及其子进程生效；重新打开终端后需要重新设置。可用 `[Convert]::FromBase64String($env:ANALYSIS_ENCRYPTION_KEY).Length` 验证结果是 `32`。更换密钥会使未完成分析任务的临时密文无法解密。
 
 ```powershell
 cd go-backend
+$env:ANALYSIS_ENCRYPTION_KEY = Read-Host '粘贴刚才生成的 Base64 密钥'
 go run ./cmd/api
 ```
 
 ```powershell
 cd go-backend
+$env:ANALYSIS_ENCRYPTION_KEY = Read-Host '粘贴同一串 Base64 密钥'
 go run ./cmd/worker
 ```
+
+Scheduler 不读取该密钥：
 
 ```powershell
 cd go-backend

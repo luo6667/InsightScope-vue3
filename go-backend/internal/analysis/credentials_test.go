@@ -34,7 +34,13 @@ func TestCredentialsRoundTripAndJobBinding(t *testing.T) {
 }
 
 func TestCredentialsRejectsInvalidKey(t *testing.T) {
+	if _, err := NewCredentials(""); err == nil || !strings.Contains(err.Error(), "未设置 ANALYSIS_ENCRYPTION_KEY") {
+		t.Fatalf("missing key should explain how to set it: %v", err)
+	}
 	if _, err := NewCredentials("short"); err == nil {
 		t.Fatal("short key accepted")
+	}
+	if _, err := NewCredentials(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 16)))); err == nil {
+		t.Fatal("16-byte key accepted")
 	}
 }

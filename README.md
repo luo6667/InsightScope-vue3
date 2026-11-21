@@ -63,7 +63,7 @@ InsightScope 是一个前端为主的 AI 全栈项目，帮助产品 / 运营 / 
 > 依赖：Go、Node.js（仅用于 Vue/Vite）、MySQL 和 Redis。Go 后端沿用现有 `plfx` 数据库；迁移前先备份数据库。详细配置见 [Go 后端运行说明](go-backend/README.md)。
 
 ```powershell
-# 在 go-backend 目录，先设置 ANALYSIS_ENCRYPTION_KEY 等环境变量
+# 在 go-backend 目录，先按 go-backend/README.md 配置环境变量
 go run ./cmd/migrate
 # 另开三个终端，分别运行：
 go run ./cmd/api
