@@ -54,6 +54,7 @@ func (s Server) Router() *gin.Engine {
 	})
 	api := r.Group("/api", s.requireToken)
 	api.GET("/datasets", s.listDatasets)
+	api.POST("/datasets", s.createDataset)
 	api.GET("/datasets/:id", s.getDataset)
 	api.GET("/datasets/:id/comments", s.listComments)
 	api.PATCH("/datasets/:id/comments/:cid", s.updateComment)
