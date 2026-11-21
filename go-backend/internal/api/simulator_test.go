@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 type simulationEvents struct {
@@ -75,5 +77,33 @@ func TestSimulationReplaysOneCommentAndStopsAtEnd(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSimulationRedisStateAllowsCrossInstanceSpeedAndStop(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	defer client.Close()
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sim := &simulation{speed: 5, cancel: cancel}
+	first := &Simulator{Redis: client, running: map[uint64]*simulation{8: sim}}
+	generation, err := first.startRedis(context.Background(), 8, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sim.generation = generation
+	second := &Simulator{Redis: client}
+	if changed, err := second.changeSpeedRedis(context.Background(), 8, 10); err != nil || !changed {
+		t.Fatalf("cross-instance speed: %v %v", changed, err)
+	}
+	if _, speed, active := first.current(8, sim); !active || speed != 10 {
+		t.Fatalf("first instance speed: %v %v", active, speed)
+	}
+	if err := second.stop(8); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, active := first.current(8, sim); active || first.advance(8, sim) {
+		t.Fatal("stopped generation must not replay")
 	}
 }

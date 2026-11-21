@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"insightscope/go-backend/internal/alerts"
@@ -19,15 +20,17 @@ import (
 )
 
 type simulation struct {
-	index  int
-	speed  float64
-	cancel context.CancelFunc
+	index      int
+	speed      float64
+	generation string
+	cancel     context.CancelFunc
 }
 
 type Simulator struct {
 	DB      *gorm.DB
 	Events  analysis.EventPublisher
 	Alerts  *alerts.Engine
+	Redis   *redis.Client
 	mu      sync.Mutex
 	running map[uint64]*simulation
 }
@@ -41,7 +44,12 @@ func (s *Simulator) emit(ctx context.Context, id uint64, name string, payload an
 	}
 }
 
-func (s *Simulator) stop(id uint64) {
+func (s *Simulator) stop(id uint64) error {
+	if s.Redis != nil {
+		if err := s.Redis.Del(context.Background(), simKey(id)).Err(); err != nil {
+			return err
+		}
+	}
 	s.mu.Lock()
 	if sim := s.running[id]; sim != nil {
 		sim.cancel()
@@ -49,18 +57,27 @@ func (s *Simulator) stop(id uint64) {
 	delete(s.running, id)
 	s.mu.Unlock()
 	s.emit(context.Background(), id, "sim:status", gin.H{"running": false})
+	return nil
 }
 
 func (s *Simulator) current(id uint64, sim *simulation) (int, float64, bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.running[id] != sim {
+		s.mu.Unlock()
 		return 0, 0, false
 	}
-	return sim.index, sim.speed, true
+	index, speed := sim.index, sim.speed
+	s.mu.Unlock()
+	if s.Redis != nil {
+		return s.currentRedis(id, sim)
+	}
+	return index, speed, true
 }
 
 func (s *Simulator) advance(id uint64, sim *simulation) bool {
+	if s.Redis != nil {
+		return s.advanceRedis(id, sim)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.running[id] != sim {
@@ -70,10 +87,20 @@ func (s *Simulator) advance(id uint64, sim *simulation) bool {
 	return true
 }
 
+func (s *Simulator) discard(id uint64, sim *simulation) {
+	s.mu.Lock()
+	if s.running[id] == sim {
+		delete(s.running, id)
+		sim.cancel()
+	}
+	s.mu.Unlock()
+}
+
 func (s *Simulator) run(ctx context.Context, id uint64, sim *simulation) {
 	for ctx.Err() == nil {
 		index, speed, active := s.current(id, sim)
 		if !active {
+			s.discard(id, sim)
 			return
 		}
 		var total int64
@@ -95,6 +122,7 @@ func (s *Simulator) run(ctx context.Context, id uint64, sim *simulation) {
 			return
 		}
 		if !s.advance(id, sim) {
+			s.discard(id, sim)
 			return
 		}
 		s.emit(ctx, id, "comment:stream", gin.H{"id": strconv.FormatUint(comment.ID, 10), "content": comment.Content, "author": comment.Author, "platform": comment.Platform, "timestamp": comment.Timestamp, "sentiment": comment.Sentiment, "sentimentScore": comment.SentimentScore, "topics": comment.Topics})
@@ -105,6 +133,7 @@ func (s *Simulator) run(ctx context.Context, id uint64, sim *simulation) {
 		}
 		_, speed, active = s.current(id, sim)
 		if !active {
+			s.discard(id, sim)
 			return
 		}
 		delay := time.Duration(math.Max(30, math.Round(1000/speed))) * time.Millisecond
@@ -123,6 +152,18 @@ func (s *Simulator) stopIfCurrent(id uint64, sim *simulation) {
 	if s.running[id] != sim {
 		s.mu.Unlock()
 		return
+	}
+	if s.Redis != nil {
+		owned, err := s.stopIfCurrentRedis(id, sim)
+		if err != nil {
+			log.Printf("[simulate] stop Redis state %d: %v", id, err)
+		}
+		if !owned {
+			delete(s.running, id)
+			sim.cancel()
+			s.mu.Unlock()
+			return
+		}
 	}
 	delete(s.running, id)
 	sim.cancel()
@@ -184,9 +225,21 @@ func (s Server) startSimulation(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "数据集没有评论"})
 		return
 	}
-	s.Simulator.stop(id)
+	if err := s.Simulator.stop(id); err != nil {
+		c.JSON(503, gin.H{"error": "模拟服务暂不可用"})
+		return
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	sim := &simulation{speed: speed, cancel: cancel}
+	if s.Simulator.Redis != nil {
+		generation, err := s.Simulator.startRedis(c.Request.Context(), id, speed)
+		if err != nil {
+			cancel()
+			c.JSON(503, gin.H{"error": "模拟服务暂不可用"})
+			return
+		}
+		sim.generation = generation
+	}
 	s.Simulator.mu.Lock()
 	if s.Simulator.running == nil {
 		s.Simulator.running = map[uint64]*simulation{}
@@ -204,7 +257,10 @@ func (s Server) stopSimulation(c *gin.Context) {
 		return
 	}
 	if s.Simulator != nil {
-		s.Simulator.stop(id)
+		if err := s.Simulator.stop(id); err != nil {
+			c.JSON(503, gin.H{"error": "模拟服务暂不可用"})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -220,6 +276,24 @@ func (s Server) changeSimulationSpeed(c *gin.Context) {
 	}
 	if s.Simulator == nil {
 		c.JSON(404, gin.H{"error": "模拟未在运行"})
+		return
+	}
+	if s.Simulator.Redis != nil {
+		exists, err := s.Simulator.changeSpeedRedis(c.Request.Context(), id, speed)
+		if err != nil {
+			c.JSON(503, gin.H{"error": "模拟服务暂不可用"})
+			return
+		}
+		if !exists {
+			c.JSON(404, gin.H{"error": "模拟未在运行"})
+			return
+		}
+		s.Simulator.mu.Lock()
+		if sim := s.Simulator.running[id]; sim != nil {
+			sim.speed = speed
+		}
+		s.Simulator.mu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"ok": true, "speed": speed})
 		return
 	}
 	s.Simulator.mu.Lock()
