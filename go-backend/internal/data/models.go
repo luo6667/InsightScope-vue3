@@ -40,6 +40,20 @@ type Comment struct {
 
 func (Comment) TableName() string { return "comments" }
 
+type AnalysisJob struct {
+	ID          uint64    `gorm:"column:id;primaryKey"`
+	DatasetID   string    `gorm:"column:datasetId"`
+	Status      string    `gorm:"column:status"`
+	Total       int       `gorm:"column:total"`
+	Processed   int       `gorm:"column:processed"`
+	Failed      int       `gorm:"column:failed"`
+	Concurrency int       `gorm:"column:concurrency"`
+	CreatedAt   time.Time `gorm:"column:createdAt"`
+	UpdatedAt   time.Time `gorm:"column:updatedAt"`
+}
+
+func (AnalysisJob) TableName() string { return "analysis_jobs" }
+
 type AlertRule struct {
 	ID        uint64    `gorm:"column:id;primaryKey"`
 	DatasetID string    `gorm:"column:datasetId"`

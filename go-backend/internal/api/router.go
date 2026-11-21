@@ -57,6 +57,7 @@ func (s Server) Router() *gin.Engine {
 	api.GET("/scenarios", listScenarios)
 	api.POST("/datasets", s.createDataset)
 	api.GET("/datasets/:id", s.getDataset)
+	api.DELETE("/datasets/:id", s.deleteDataset)
 	api.GET("/datasets/:id/comments", s.listComments)
 	api.PATCH("/datasets/:id/comments/:cid", s.updateComment)
 	api.GET("/datasets/:id/export", s.exportComments)
