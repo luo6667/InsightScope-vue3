@@ -291,8 +291,16 @@ func (s Server) createDataset(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数不合法"})
 		return
 	}
+	body.Name = strings.TrimSpace(body.Name)
+	body.Platform = strings.TrimSpace(body.Platform)
+	body.ScenarioID = strings.TrimSpace(body.ScenarioID)
+	body.FeedURL = strings.TrimSpace(body.FeedURL)
 	if strings.TrimSpace(body.ScenarioID) != "" {
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "内置场景迁移尚未完成"})
+		if len([]rune(body.Name)) > 100 || len([]rune(body.Platform)) > 64 || len([]rune(body.ScenarioID)) > 64 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数不合法"})
+			return
+		}
+		s.createScenarioDataset(c, body)
 		return
 	}
 	if len(body.Comments) == 0 && strings.TrimSpace(body.FeedURL) != "" {
