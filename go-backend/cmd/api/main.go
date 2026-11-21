@@ -13,6 +13,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"insightscope/go-backend/internal/alerts"
 	"insightscope/go-backend/internal/analysis"
 	"insightscope/go-backend/internal/api"
 	"insightscope/go-backend/internal/realtime"
@@ -67,8 +68,9 @@ func main() {
 	busContext, stopBus := context.WithCancel(context.Background())
 	defer stopBus()
 	go (realtime.Bus{Redis: redisClient, Socket: socket}).Run(busContext)
+	publisher := realtime.Publisher{Redis: redisClient}
 	server := api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins,
-		Credentials: credentials, Queue: tasks.Client{Queue: queue}, Events: realtime.Publisher{Redis: redisClient}, FeedRedis: redisClient, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
+		Credentials: credentials, Queue: tasks.Client{Queue: queue}, Events: publisher, FeedRedis: redisClient, Alerts: &alerts.Engine{DB: db, Events: publisher}, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
 	go server.RunFeedScheduler(busContext)
 	log.Fatal(server.Router().Run(":" + port))
 }

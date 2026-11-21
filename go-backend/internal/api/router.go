@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	"insightscope/go-backend/internal/alerts"
 	"insightscope/go-backend/internal/analysis"
 	"insightscope/go-backend/internal/data"
 	"insightscope/go-backend/internal/tasks"
@@ -29,6 +30,7 @@ type Server struct {
 	Queue           tasks.Enqueuer
 	Events          analysis.EventPublisher
 	FeedRedis       *redis.Client
+	Alerts          *alerts.Engine
 }
 
 type datasetListRow struct {

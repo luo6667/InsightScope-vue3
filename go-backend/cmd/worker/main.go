@@ -12,6 +12,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"insightscope/go-backend/internal/alerts"
 	"insightscope/go-backend/internal/analysis"
 	"insightscope/go-backend/internal/realtime"
 	"insightscope/go-backend/internal/tasks"
@@ -48,7 +49,8 @@ func main() {
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("Redis connection failed: ", err)
 	}
-	worker := analysis.Worker{DB: db, Credentials: credentials, Events: realtime.Publisher{Redis: redisClient}, Locks: analysis.RedisLocks{Redis: redisClient}}
+	publisher := realtime.Publisher{Redis: redisClient}
+	worker := analysis.Worker{DB: db, Credentials: credentials, Events: publisher, Locks: analysis.RedisLocks{Redis: redisClient}, Alerts: &alerts.Engine{DB: db, Events: publisher}}
 	server := asynq.NewServer(asynq.RedisClientOpt{Addr: redisAddr, Password: redisPassword}, asynq.Config{Concurrency: 4, Queues: map[string]int{"analysis": 1}})
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.AnalysisType, worker.Handle)

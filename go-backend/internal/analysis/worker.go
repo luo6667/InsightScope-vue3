@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"insightscope/go-backend/internal/alerts"
 	"insightscope/go-backend/internal/data"
 	"insightscope/go-backend/internal/tasks"
 )
@@ -27,6 +28,7 @@ type Worker struct {
 	Model       LLM
 	Events      EventPublisher
 	Locks       LockStore
+	Alerts      *alerts.Engine
 }
 
 func (w Worker) emit(ctx context.Context, job data.AnalysisJob, status string) {
@@ -222,6 +224,7 @@ func (w Worker) Handle(ctx context.Context, task *asynq.Task) error {
 				failures++
 			}
 		}
+		priorProcessed := current.Processed
 		current, err = w.processBatch(ctx, job.ID, items, results)
 		if err != nil {
 			return err
@@ -230,6 +233,11 @@ func (w Worker) Handle(ctx context.Context, task *asynq.Task) error {
 			return nil
 		}
 		w.emit(ctx, current, "running")
+		if current.Processed > priorProcessed && w.Alerts != nil {
+			if err := w.Alerts.Check(ctx, job.DatasetID, nil); err != nil {
+				log.Printf("[analysis] alert check for job %d: %v", job.ID, err)
+			}
+		}
 	}
 	if failures > 0 {
 		retry, ok := asynq.GetRetryCount(ctx)

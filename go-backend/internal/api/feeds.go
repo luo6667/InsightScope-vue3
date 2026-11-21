@@ -254,6 +254,11 @@ func (s Server) readFeed(ctx context.Context, ds data.Dataset) (int, error) {
 		return 0, err
 	}
 	s.publishFeed(ctx, ds.ID, "feed:status", gin.H{"running": true, "lastAt": lastAt, "count": inserted})
+	if inserted > 0 && s.Alerts != nil {
+		if err := s.Alerts.Check(ctx, strconv.FormatUint(ds.ID, 10), nil); err != nil {
+			log.Printf("[feed] alert check for %d: %v", ds.ID, err)
+		}
+	}
 	return inserted, nil
 }
 
