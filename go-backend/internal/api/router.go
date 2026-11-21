@@ -57,6 +57,7 @@ func (s Server) Router() *gin.Engine {
 	api.GET("/datasets/:id/comments", s.listComments)
 	api.PATCH("/datasets/:id/comments/:cid", s.updateComment)
 	api.GET("/datasets/:id/export", s.exportComments)
+	api.GET("/datasets/:id/stats", s.getStats)
 	api.GET("/alerts/rules", s.listRules)
 	api.POST("/alerts/rules", s.createRule)
 	api.PATCH("/alerts/rules/:id", s.updateRule)
