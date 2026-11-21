@@ -91,7 +91,15 @@ func (w Worker) processBatch(ctx context.Context, id uint64, items []data.Commen
 				continue
 			}
 			result := results[i]
-			change := map[string]any{"sentiment": result.Sentiment, "sentimentScore": result.Score, "topics": result.Topics, "keywords": result.Keywords, "analyzed": true}
+			topics, err := json.Marshal(result.Topics)
+			if err != nil {
+				return err
+			}
+			keywords, err := json.Marshal(result.Keywords)
+			if err != nil {
+				return err
+			}
+			change := map[string]any{"sentiment": result.Sentiment, "sentimentScore": result.Score, "topics": string(topics), "keywords": string(keywords), "analyzed": true}
 			updated := tx.Model(&data.Comment{}).Where("id = ? AND datasetId = ? AND analyzed = ?", item.ID, job.DatasetID, false).Updates(change)
 			if updated.Error != nil {
 				return updated.Error

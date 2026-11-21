@@ -133,7 +133,7 @@ func (s Server) resetAnalysis(c *gin.Context) {
 		if err := tx.Where("datasetId = ?", datasetID).Delete(&data.AnalysisJob{}).Error; err != nil {
 			return err
 		}
-		change := tx.Model(&data.Comment{}).Where("datasetId = ?", datasetID).Updates(map[string]any{"analyzed": false, "sentiment": "neu", "sentimentScore": 0, "topics": []string{}, "keywords": []string{}})
+		change := tx.Model(&data.Comment{}).Where("datasetId = ?", datasetID).Updates(map[string]any{"analyzed": false, "sentiment": "neu", "sentimentScore": 0, "topics": "[]", "keywords": "[]"})
 		affected = change.RowsAffected
 		return change.Error
 	})
