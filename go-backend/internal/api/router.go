@@ -28,6 +28,7 @@ type Server struct {
 	CORSOrigins     []string
 	Credentials     analysis.Credentials
 	Queue           tasks.Enqueuer
+	FeedQueue       tasks.FeedEnqueuer
 	Events          analysis.EventPublisher
 	FeedRedis       *redis.Client
 	Alerts          *alerts.Engine

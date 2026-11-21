@@ -13,6 +13,9 @@ import (
 func (s Server) RunFeedScheduler(ctx context.Context) {
 	lastAttempt := make(map[uint64]time.Time)
 	check := func() {
+		if s.FeedQueue == nil {
+			return
+		}
 		var datasets []data.Dataset
 		if err := s.DB.WithContext(ctx).Where("feedRunning = ?", true).Find(&datasets).Error; err != nil {
 			log.Printf("[feed] scheduler query: %v", err)
@@ -29,14 +32,11 @@ func (s Server) RunFeedScheduler(ctx context.Context) {
 			if !feedReady(ds, lastAttempt[ds.ID], now) {
 				continue
 			}
+			if err := s.FeedQueue.EnqueueFeed(ctx, ds.ID); err != nil {
+				log.Printf("[feed] schedule dataset %d: %v", ds.ID, err)
+				continue
+			}
 			lastAttempt[ds.ID] = now
-			go func(id uint64) {
-				pullCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-				defer cancel()
-				if _, _, err := s.fetchFeed(pullCtx, id); err != nil {
-					log.Printf("[feed] scheduled pull %d: %v", id, err)
-				}
-			}(ds.ID)
 		}
 	}
 	check()

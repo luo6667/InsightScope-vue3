@@ -17,14 +17,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"insightscope/go-backend/internal/ai"
 	"insightscope/go-backend/internal/data"
+	"insightscope/go-backend/internal/tasks"
 )
 
 var releaseFeedLock = redis.NewScript(`if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end`)
+var renewFeedLock = redis.NewScript(`if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE',KEYS[1],ARGV[2]) else return 0 end`)
 
 func feedID(c *gin.Context) (uint64, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -54,18 +57,22 @@ func (s Server) startFeed(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "该数据集未配置数据源 URL"})
 		return
 	}
+	if s.FeedQueue == nil {
+		c.JSON(503, gin.H{"error": "任务服务暂不可用"})
+		return
+	}
 	if err := s.DB.WithContext(c.Request.Context()).Model(&ds).Update("feedRunning", true).Error; err != nil {
 		c.JSON(500, gin.H{"error": "服务器内部错误"})
 		return
 	}
-	s.publishFeed(c.Request.Context(), id, "feed:status", gin.H{"running": true})
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		if _, _, err := s.fetchFeed(ctx, id); err != nil {
-			log.Printf("[feed] initial pull dataset %d: %v", id, err)
+	if err := s.FeedQueue.EnqueueFeed(c.Request.Context(), id); err != nil {
+		if restoreErr := s.DB.WithContext(c.Request.Context()).Model(&ds).Update("feedRunning", ds.FeedRunning).Error; restoreErr != nil {
+			log.Printf("[feed] restore running state %d: %v", id, restoreErr)
 		}
-	}()
+		c.JSON(503, gin.H{"error": "任务服务暂不可用"})
+		return
+	}
+	s.publishFeed(c.Request.Context(), id, "feed:status", gin.H{"running": true})
 	c.JSON(200, gin.H{"ok": true})
 }
 
@@ -94,6 +101,27 @@ func (s Server) pullFeed(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true, "count": count, "skipped": skipped})
 }
 
+func (s Server) HandleFeed(ctx context.Context, task *asynq.Task) error {
+	if task.Type() != tasks.FeedType {
+		return asynq.SkipRetry
+	}
+	var payload tasks.FeedPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil || payload.DatasetID == 0 {
+		return asynq.SkipRetry
+	}
+	var ds data.Dataset
+	if err := s.DB.WithContext(ctx).Select("id", "feedRunning").First(&ds, payload.DatasetID).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if !ds.FeedRunning {
+		return nil
+	}
+	_, _, err := s.fetchFeed(ctx, payload.DatasetID)
+	return err
+}
+
 func (s Server) publishFeed(ctx context.Context, id uint64, event string, payload any) {
 	if s.Events == nil {
 		return
@@ -120,14 +148,34 @@ func (s Server) fetchFeed(ctx context.Context, id uint64) (count int, skipped bo
 	if !locked {
 		return 0, true, nil
 	}
+	pullCtx, stop := context.WithCancel(ctx)
 	defer func() {
+		stop()
 		unlockCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if unlockErr := releaseFeedLock.Run(unlockCtx, s.FeedRedis, []string{key}, owner).Err(); unlockErr != nil {
 			log.Printf("[feed] unlock %d: %v", id, unlockErr)
 		}
 	}()
-	count, err = s.doFetchFeed(ctx, id)
+	go func() {
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pullCtx.Done():
+				return
+			case <-ticker.C:
+				renewCtx, cancel := context.WithTimeout(pullCtx, 3*time.Second)
+				valid, err := renewFeedLock.Run(renewCtx, s.FeedRedis, []string{key}, owner, (2 * time.Minute).Milliseconds()).Int64()
+				cancel()
+				if err != nil || valid != 1 {
+					stop()
+					return
+				}
+			}
+		}
+	}()
+	count, err = s.doFetchFeed(pullCtx, id)
 	return count, false, err
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/hibiken/asynq"
 )
@@ -44,6 +45,10 @@ type Enqueuer interface {
 	EnqueueAnalysis(context.Context, uint64) error
 }
 
+type FeedEnqueuer interface {
+	EnqueueFeed(context.Context, uint64) error
+}
+
 type Client struct{ Queue *asynq.Client }
 
 func (c Client) EnqueueAnalysis(ctx context.Context, jobID uint64) error {
@@ -52,5 +57,17 @@ func (c Client) EnqueueAnalysis(ctx context.Context, jobID uint64) error {
 		return err
 	}
 	_, err = c.Queue.EnqueueContext(ctx, task, asynq.Queue("analysis"), asynq.MaxRetry(3))
+	return err
+}
+
+func (c Client) EnqueueFeed(ctx context.Context, datasetID uint64) error {
+	task, err := Feed(datasetID)
+	if err != nil {
+		return err
+	}
+	_, err = c.Queue.EnqueueContext(ctx, task, asynq.Queue("feed"), asynq.MaxRetry(3), asynq.Unique(55*time.Second))
+	if errors.Is(err, asynq.ErrDuplicateTask) {
+		return nil
+	}
 	return err
 }

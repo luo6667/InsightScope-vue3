@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,16 @@ import (
 	"github.com/redis/go-redis/v9"
 	"insightscope/go-backend/internal/data"
 )
+
+type fakeFeedQueue struct {
+	IDs []uint64
+	Err error
+}
+
+func (q *fakeFeedQueue) EnqueueFeed(_ context.Context, id uint64) error {
+	q.IDs = append(q.IDs, id)
+	return q.Err
+}
 
 func TestFeedPullImportsOnlyNewCommentsAndPublishesEvents(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -61,6 +72,35 @@ func TestFeedPullSkipsWhenDatasetLockIsHeld(t *testing.T) {
 	w := requestJSON(server, http.MethodPost, "/api/datasets/8/feed/pull", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"skipped":true`) {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestFeedStartQueuesPullAndReturnsServiceUnavailableOnFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server, mock := writeTestServer(t)
+	queue := &fakeFeedQueue{}
+	server.FeedQueue = queue
+	mock.ExpectQuery("SELECT .* FROM `datasets`").WillReturnRows(sqlmock.NewRows([]string{"id", "feedUrl", "feedRunning"}).AddRow(8, "https://example.com/feed", false))
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE `datasets`").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	w := requestJSON(server, http.MethodPost, "/api/datasets/8/feed/start", "")
+	if w.Code != 200 || w.Body.String() != `{"ok":true}` || len(queue.IDs) != 1 || queue.IDs[0] != 8 {
+		t.Fatalf("start: %d %s %+v", w.Code, w.Body.String(), queue.IDs)
+	}
+	queue.Err = errors.New("redis unavailable")
+	mock.ExpectQuery("SELECT .* FROM `datasets`").WillReturnRows(sqlmock.NewRows([]string{"id", "feedUrl", "feedRunning"}).AddRow(8, "https://example.com/feed", false))
+	for i := 0; i < 2; i++ {
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `datasets`").WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+	}
+	w = requestJSON(server, http.MethodPost, "/api/datasets/8/feed/start", "")
+	if w.Code != 503 {
+		t.Fatalf("failed queue: %d %s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

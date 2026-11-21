@@ -14,6 +14,7 @@ import (
 
 	"insightscope/go-backend/internal/alerts"
 	"insightscope/go-backend/internal/analysis"
+	"insightscope/go-backend/internal/api"
 	"insightscope/go-backend/internal/realtime"
 	"insightscope/go-backend/internal/tasks"
 )
@@ -51,8 +52,10 @@ func main() {
 	}
 	publisher := realtime.Publisher{Redis: redisClient}
 	worker := analysis.Worker{DB: db, Credentials: credentials, Events: publisher, Locks: analysis.RedisLocks{Redis: redisClient}, Alerts: &alerts.Engine{DB: db, Events: publisher}}
-	server := asynq.NewServer(asynq.RedisClientOpt{Addr: redisAddr, Password: redisPassword}, asynq.Config{Concurrency: 4, Queues: map[string]int{"analysis": 1}})
+	server := asynq.NewServer(asynq.RedisClientOpt{Addr: redisAddr, Password: redisPassword}, asynq.Config{Concurrency: 4, Queues: map[string]int{"analysis": 1, "feed": 1}})
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.AnalysisType, worker.Handle)
+	feedWorker := api.Server{DB: db, FeedRedis: redisClient, Events: publisher, Alerts: worker.Alerts}
+	mux.HandleFunc(tasks.FeedType, feedWorker.HandleFeed)
 	log.Fatal(server.Run(mux))
 }

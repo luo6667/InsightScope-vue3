@@ -38,10 +38,14 @@
 | `PATCH /api/alerts/:id/ack` | 确认告警 |
 | `POST /api/ai` | 使用用户配置的模型转发 SSE 流式报告 |
 
-本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ANALYSIS_ENCRYPTION_KEY`（32 字节密钥的 Base64 编码）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）、`RATE_LIMIT_PER_MIN`（默认 0，关闭写接口限流）和 `PORT`（默认 5176），然后分别执行 `go run ./cmd/api` 与 `go run ./cmd/worker`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
+本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ANALYSIS_ENCRYPTION_KEY`（32 字节密钥的 Base64 编码）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）、`RATE_LIMIT_PER_MIN`（默认 0，关闭写接口限流）和 `PORT`（默认 5176），然后分别执行 `go run ./cmd/api`、`go run ./cmd/worker` 与 `go run ./cmd/scheduler`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
 
 新增的版本化数据库变更通过 `go run ./cmd/migrate` 手动执行。目前仅创建 `schema_migrations` 与 `analysis_job_secrets`，不会清空或重建旧数据；执行前仍应备份现有 MySQL。后台分析加密主密钥仅由服务端环境变量 `ANALYSIS_ENCRYPTION_KEY` 提供，不能写入前端环境变量或提交到 Git。分析任务投递到 Asynq 队列时只放任务 ID，凭据不进入 Redis。
 
 Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。API 已订阅 Redis 实时事件频道并转发到数据集房间，后台分析 Worker 和抓取流程会发布进度及状态事件。
 
-后续仍需完成真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。同一分析任务由 Redis 持有者锁互斥，锁定期自动续租且仅持有者可释放，评论写回仍以数据库条件更新保证幂等。API 启动时会清理已结束任务的密文，并重新投递仍有密文的待处理或运行中任务，处理数据库提交后进程退出导致的漏投递。抓取由 API 内的定时检查恢复，使用 Redis 数据集锁防止多实例和手动抓取重叠；`FEED_MAX_ITEMS` 默认 2000，`ALLOW_PRIVATE_FEED_URL=0` 可启用严格 URL 检查。抓取入库与 AI 分析写回后会按原规则计算负面率、敏感关键词、评论量告警和 Z-score 异常，并发布 `alert:new` 事件。模拟器在 API 进程内按时间线播放已有评论，停止或重启会取消旧播放链。
+后续仍需完成全面的真实 MySQL 契约回归、Redis 故障测试和前端全流程验收；这些完成前不能移除 Node 后端。
+
+Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。同一分析任务由 Redis 持有者锁互斥，锁定期自动续租且仅持有者可释放，评论写回仍以数据库条件更新保证幂等。API 启动时会清理已结束任务的密文，并重新投递仍有密文的待处理或运行中任务，处理数据库提交后进程退出导致的漏投递。
+
+抓取由独立 Scheduler 定时投递到 Asynq 的 `feed` 队列，Worker 处理抓取；手动抓取同步返回结果。抓取使用 Redis 数据集锁防止多实例和手动抓取重叠，长批次会续租；`FEED_MAX_ITEMS` 默认 2000，`ALLOW_PRIVATE_FEED_URL=0` 可启用严格 URL 检查。抓取入库与 AI 分析写回后会按原规则计算负面率、敏感关键词、评论量告警和 Z-score 异常，并发布 `alert:new` 事件。模拟器在 API 进程内按时间线播放已有评论，停止或重启会取消旧播放链。
