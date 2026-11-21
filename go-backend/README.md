@@ -19,6 +19,7 @@
 | `GET /api/datasets/:id/export` | 按列表筛选条件导出完整 CSV 或 JSON |
 | `GET /api/datasets/:id/stats` | 情感、主题、趋势和关键词统计 |
 | `GET /api/datasets/:id/analysis` | 返回数据集最新分析任务，尚无任务时返回 `null` |
+| `POST /api/datasets/:id/analysis` | 加密保存用户配置并投递分析任务；Worker 尚未实现，不能用于实际分析 |
 | `GET /api/alerts/rules` | 返回告警规则，可按数据集筛选 |
 | `POST /api/alerts/rules` | 创建告警规则 |
 | `PATCH /api/alerts/rules/:id` | 修改告警规则 |
@@ -27,9 +28,9 @@
 | `PATCH /api/alerts/:id/ack` | 确认告警 |
 | `POST /api/ai` | 使用用户配置的模型转发 SSE 流式报告 |
 
-本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）和 `PORT`（默认 5176），然后在本目录执行 `go run ./cmd/api`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
+本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ANALYSIS_ENCRYPTION_KEY`（32 字节密钥的 Base64 编码）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）和 `PORT`（默认 5176），然后在本目录执行 `go run ./cmd/api`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
 
-新增的版本化数据库变更通过 `go run ./cmd/migrate` 手动执行。目前仅创建 `schema_migrations` 与 `analysis_job_secrets`，不会清空或重建旧数据；执行前仍应备份现有 MySQL。后台分析加密使用 32 字节 Base64 主密钥，后续接入任务创建时由服务端环境变量 `ANALYSIS_ENCRYPTION_KEY` 提供，不能写入前端环境变量或提交到 Git。
+新增的版本化数据库变更通过 `go run ./cmd/migrate` 手动执行。目前仅创建 `schema_migrations` 与 `analysis_job_secrets`，不会清空或重建旧数据；执行前仍应备份现有 MySQL。后台分析加密主密钥仅由服务端环境变量 `ANALYSIS_ENCRYPTION_KEY` 提供，不能写入前端环境变量或提交到 Git。分析任务投递到 Asynq 队列时只放任务 ID，凭据不进入 Redis。
 
 Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。API 已订阅 Redis 实时事件频道并转发到数据集房间；后台 Worker 尚未接入事件发布。
 

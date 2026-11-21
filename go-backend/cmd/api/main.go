@@ -8,12 +8,15 @@ import (
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
+	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"insightscope/go-backend/internal/analysis"
 	"insightscope/go-backend/internal/api"
 	"insightscope/go-backend/internal/realtime"
+	"insightscope/go-backend/internal/tasks"
 )
 
 func env(name, fallback string) string {
@@ -42,6 +45,12 @@ func main() {
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("Redis connection failed: ", err)
 	}
+	credentials, err := analysis.NewCredentials(os.Getenv("ANALYSIS_ENCRYPTION_KEY"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	queue := asynq.NewClient(asynq.RedisClientOpt{Addr: env("REDIS_ADDR", "127.0.0.1:6379"), Password: os.Getenv("REDIS_PASSWORD")})
+	defer queue.Close()
 	port := env("PORT", "5176")
 	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:5175,http://localhost:5176"), ",")
 	for i := range origins {
@@ -52,5 +61,6 @@ func main() {
 	busContext, stopBus := context.WithCancel(context.Background())
 	defer stopBus()
 	go (realtime.Bus{Redis: redisClient, Socket: socket}).Run(busContext)
-	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}.Router().Run(":" + port))
+	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins,
+		Credentials: credentials, Queue: tasks.Client{Queue: queue}, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}.Router().Run(":" + port))
 }

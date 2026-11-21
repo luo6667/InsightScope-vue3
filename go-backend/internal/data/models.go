@@ -54,6 +54,15 @@ type AnalysisJob struct {
 
 func (AnalysisJob) TableName() string { return "analysis_jobs" }
 
+type AnalysisJobSecret struct {
+	JobID      uint64    `gorm:"column:jobId;primaryKey"`
+	Nonce      []byte    `gorm:"column:nonce"`
+	Ciphertext []byte    `gorm:"column:ciphertext"`
+	CreatedAt  time.Time `gorm:"column:createdAt"`
+}
+
+func (AnalysisJobSecret) TableName() string { return "analysis_job_secrets" }
+
 type AlertRule struct {
 	ID        uint64    `gorm:"column:id;primaryKey"`
 	DatasetID string    `gorm:"column:datasetId"`

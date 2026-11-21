@@ -24,6 +24,12 @@ type analysisJobResponse struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+func jobResponse(job data.AnalysisJob) analysisJobResponse {
+	return analysisJobResponse{ID: strconv.FormatUint(job.ID, 10), DatasetID: job.DatasetID, Status: job.Status,
+		Total: job.Total, Processed: job.Processed, Failed: job.Failed, Concurrency: job.Concurrency,
+		CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt}
+}
+
 func (s Server) getAnalysisJob(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -40,9 +46,5 @@ func (s Server) getAnalysisJob(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"job": analysisJobResponse{
-		ID: strconv.FormatUint(job.ID, 10), DatasetID: job.DatasetID, Status: job.Status,
-		Total: job.Total, Processed: job.Processed, Failed: job.Failed, Concurrency: job.Concurrency,
-		CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
-	}})
+	c.JSON(http.StatusOK, gin.H{"job": jobResponse(job)})
 }

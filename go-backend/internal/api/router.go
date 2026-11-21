@@ -12,7 +12,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"insightscope/go-backend/internal/analysis"
 	"insightscope/go-backend/internal/data"
+	"insightscope/go-backend/internal/tasks"
 )
 
 type Server struct {
@@ -22,6 +24,8 @@ type Server struct {
 	RealtimeHandler http.Handler
 	RedisPing       func(context.Context) error
 	CORSOrigins     []string
+	Credentials     analysis.Credentials
+	Queue           tasks.Enqueuer
 }
 
 type datasetListRow struct {
@@ -71,6 +75,7 @@ func (s Server) Router() *gin.Engine {
 	api.GET("/datasets/:id/export", s.exportComments)
 	api.GET("/datasets/:id/stats", s.getStats)
 	api.GET("/datasets/:id/analysis", s.getAnalysisJob)
+	api.POST("/datasets/:id/analysis", s.createAnalysisJob)
 	api.GET("/alerts/rules", s.listRules)
 	api.POST("/alerts/rules", s.createRule)
 	api.PATCH("/alerts/rules/:id", s.updateRule)
