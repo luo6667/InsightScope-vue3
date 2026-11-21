@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -29,20 +28,6 @@ func commentPageInt(c *gin.Context, name string, fallback int) (int, bool) {
 	return value, true
 }
 
-func parseCommentDate(c *gin.Context, name string) (time.Time, bool, bool) {
-	raw := c.Query(name)
-	if raw == "" {
-		return time.Time{}, false, true
-	}
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02", "2006-01-02 15:04:05"} {
-		if value, err := time.Parse(layout, raw); err == nil {
-			return value, true, true
-		}
-	}
-	c.JSON(http.StatusBadRequest, gin.H{"error": "参数校验失败"})
-	return time.Time{}, false, false
-}
-
 func escapeLike(value string) string {
 	return strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value)
 }
@@ -61,24 +46,8 @@ func (s Server) listComments(c *gin.Context) {
 	if !ok {
 		return
 	}
-	from, hasFrom, ok := parseCommentDate(c, "from")
+	query, ok := commentFilter(c, s.DB, id)
 	if !ok {
-		return
-	}
-	to, hasTo, ok := parseCommentDate(c, "to")
-	if !ok {
-		return
-	}
-	sentiment := c.Query("sentiment")
-	if sentiment != "" && sentiment != "pos" && sentiment != "neu" && sentiment != "neg" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数校验失败"})
-		return
-	}
-	topic := strings.TrimSpace(c.Query("topic"))
-	search := strings.TrimSpace(c.Query("q"))
-	if len([]rune(topic)) > 50 || (c.Query("topic") != "" && topic == "") ||
-		len([]rune(search)) > 200 || (c.Query("q") != "" && search == "") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数校验失败"})
 		return
 	}
 
@@ -90,22 +59,6 @@ func (s Server) listComments(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
 		}
 		return
-	}
-	query := s.DB.WithContext(c.Request.Context()).Model(&data.Comment{}).Where("datasetId = ?", id)
-	if sentiment != "" {
-		query = query.Where("sentiment = ?", sentiment)
-	}
-	if hasFrom {
-		query = query.Where("timestamp >= ?", from)
-	}
-	if hasTo {
-		query = query.Where("timestamp <= ?", to)
-	}
-	if topic != "" {
-		query = query.Where("JSON_CONTAINS(topics, JSON_QUOTE(?)) = 1", topic)
-	}
-	if search != "" {
-		query = query.Where("content LIKE ?", "%"+escapeLike(search)+"%")
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
