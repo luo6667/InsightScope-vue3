@@ -48,7 +48,7 @@ func main() {
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("Redis connection failed: ", err)
 	}
-	worker := analysis.Worker{DB: db, Credentials: credentials, Events: realtime.Publisher{Redis: redisClient}}
+	worker := analysis.Worker{DB: db, Credentials: credentials, Events: realtime.Publisher{Redis: redisClient}, Locks: analysis.RedisLocks{Redis: redisClient}}
 	server := asynq.NewServer(asynq.RedisClientOpt{Addr: redisAddr, Password: redisPassword}, asynq.Config{Concurrency: 4, Queues: map[string]int{"analysis": 1}})
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.AnalysisType, worker.Handle)

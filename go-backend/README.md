@@ -38,4 +38,4 @@
 
 Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。API 已订阅 Redis 实时事件频道并转发到数据集房间；后台 Worker 尚未接入事件发布。
 
-后续仍需完成分析任务互斥与恢复、抓取与模拟、Scheduler、告警计算、真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。
+后续仍需完成分析任务恢复与故障边界、抓取与模拟、Scheduler、告警计算、真实 MySQL 契约回归及故障测试；这些完成前不能移除 Node 后端。Worker 已接入模型批量请求和单条兜底，按未分析评论恢复进度、事务写回成功结果，并在结束时清除加密凭据；暂停、取消、重置和数据集删除也会阻止旧 Worker 写回。同一分析任务由 Redis 持有者锁互斥，锁定期自动续租且仅持有者可释放，评论写回仍以数据库条件更新保证幂等。

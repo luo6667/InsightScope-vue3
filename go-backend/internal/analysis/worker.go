@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
@@ -25,6 +26,7 @@ type Worker struct {
 	Credentials Credentials
 	Model       LLM
 	Events      EventPublisher
+	Locks       LockStore
 }
 
 func (w Worker) emit(ctx context.Context, job data.AnalysisJob, status string) {
@@ -113,6 +115,40 @@ func (w Worker) Handle(ctx context.Context, task *asynq.Task) error {
 	var payload tasks.AnalysisPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil || payload.JobID == 0 {
 		return asynq.SkipRetry
+	}
+	if w.Locks != nil {
+		lease, err := w.Locks.Acquire(ctx, payload.JobID)
+		if err != nil {
+			return err
+		}
+		leaseCtx, cancel := context.WithCancel(ctx)
+		ctx = leaseCtx
+		defer func() {
+			cancel()
+			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer releaseCancel()
+			if err := lease.Release(releaseCtx); err != nil {
+				log.Printf("[analysis] lock release failed for job %d: %v", payload.JobID, err)
+			}
+		}()
+		go func() {
+			ticker := time.NewTicker(20 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-leaseCtx.Done():
+					return
+				case <-ticker.C:
+					renewCtx, stop := context.WithTimeout(leaseCtx, 3*time.Second)
+					valid, err := lease.Renew(renewCtx)
+					stop()
+					if err != nil || !valid {
+						cancel()
+						return
+					}
+				}
+			}
+		}()
 	}
 	job, err := w.loadJob(ctx, payload.JobID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
