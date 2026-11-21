@@ -40,40 +40,19 @@ Go + Gin + GORM 后端使用原有 MySQL 表，Redis 负责 Asynq 队列、统�
 
 ## 本地启动（PowerShell）
 
-以下命令均在 `go-backend` 目录执行。若 PowerShell 提示符已以 `go-backend>` 结尾，**不要再次运行 `cd go-backend`**。先启动 MySQL 和 Redis，按 [.env.example](.env.example) 设置环境变量。`.env.example` 只是模板，Go 进程不会自动读取它。首次使用现有数据库前先用 `mysqldump --single-transaction` 备份；迁移仅新增 `schema_migrations`、`analysis_job_secrets` 和 `dataset_versions`，不会重建旧表。迁移命令本身不需要加密密钥，出现 `migrations applied` 即表示成功，重复运行也可以：
+先启动 MySQL 和 Redis。若 PowerShell 提示符已以 `go-backend>` 结尾，直接运行：
 
 ```powershell
-go run ./cmd/migrate
+.\start.cmd
 ```
 
-只生成一次密钥，在本机安全保存生成的 Base64 字符串；不要把它发送到聊天、写进 Git 或放入前端环境变量。以下写法兼容 Windows PowerShell 5.1：
+从项目根目录运行则使用 `.\go-backend\start.cmd`。脚本会编译 Go 程序、执行可重复的增量迁移，并在后台启动 API、Worker、Scheduler。首次运行会在被 Git 忽略的 `go-backend/.local/analysis.key` 中生成密钥，之后复用同一密钥；不要删除该文件，否则未完成分析任务无法解密。日志保存在 `.local/logs/`。启动成功会显示 `Go backend is ready at http://localhost:5176`。再次运行会提示服务已启动。
 
 ```powershell
-$bytes = New-Object byte[] 32
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
-[Convert]::ToBase64String($bytes)
+.\stop.cmd
 ```
 
-在 **API 终端和 Worker 终端分别粘贴刚才生成的同一串**，再启动进程。PowerShell 的 `$env:` 只对当前终端及其子进程生效；重新打开终端后需要重新设置。可用 `[Convert]::FromBase64String($env:ANALYSIS_ENCRYPTION_KEY).Length` 验证结果是 `32`。更换密钥会使未完成分析任务的临时密文无法解密。
-
-```powershell
-$env:ANALYSIS_ENCRYPTION_KEY = Read-Host '粘贴刚才生成的 Base64 密钥'
-go run ./cmd/api
-```
-
-```powershell
-$env:ANALYSIS_ENCRYPTION_KEY = Read-Host '粘贴同一串 Base64 密钥'
-go run ./cmd/worker
-```
-
-Scheduler 不读取该密钥：
-
-```powershell
-go run ./cmd/scheduler
-```
-
-另开终端在 `web/` 运行 `npm install`、`npm run dev`，访问 `http://localhost:3000`。Vite 开发代理和 Socket.IO 默认连接 Go API 的 `http://localhost:5176`。`GET /healthz` 检查 MySQL，`GET /readyz` 同时检查 MySQL 和 Redis。
+其他连接参数可通过当前终端环境变量覆盖，名称见 [.env.example](.env.example)；模板不会自动加载。首次用于其他现有数据库前先备份数据库，脚本中的迁移只新增 `schema_migrations`、`analysis_job_secrets` 和 `dataset_versions`。前端仍在 `web/` 运行 `npm install`、`npm run dev`，访问 `http://localhost:3000`。Vite 和 Socket.IO 默认连接 `http://localhost:5176`。`GET /healthz` 检查 MySQL，`GET /readyz` 同时检查 MySQL 和 Redis。
 
 `NODE_ENV=production` 或 `GO_ENV=production` 时，API 会拒绝默认 MySQL 密码、缺少 CORS 来源、关闭限流或短于 16 位的访问口令；与原 Node 的生产配置门槛一致。
 

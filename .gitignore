@@ -26,6 +26,9 @@ npm-debug.log*
 # 本地数据库备份（可能包含用户数据）
 .backups/
 
+# Local Go runtime binaries, logs, PID files, and encryption key
+go-backend/.local/
+
 # 编辑器
 .vscode/
 .idea/

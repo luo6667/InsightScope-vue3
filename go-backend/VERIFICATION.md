@@ -16,6 +16,7 @@
 | Worker 中断续跑 | 隔离 MySQL 中 16 条评论，首批 8 条写回后取消 Worker 上下文；新 Worker 完成剩余 8 条，任务变为 `done`，临时密钥清除 |
 | 浏览器交互 | Chrome 经 Vite → Go API 完成粘贴导入 3 条、监控台模拟流入、评论情感与主题修正、搜索筛选、告警规则新增与停用、数据集删除 |
 | AI 设置 | 浏览器填写假的测试 Key 与模型并保存；`insight-ai-settings` localStorage 写入，刷新页面后两个字段恢复 |
+| Windows 一键启动 | Windows PowerShell 5.1 下运行 `start.cmd`，自动生成并复用 32 字节加密密钥、编译、迁移、启动 API/Worker/Scheduler；重复启动不创建新进程；`stop.cmd` 后再次启动成功，`/readyz` 正常，原库 4 个数据集可读，`localhost:3000` 来源的 Socket.IO 客户端连接成功 |
 
 ## 原数据库迁移与对照
 

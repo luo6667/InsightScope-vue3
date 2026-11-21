@@ -63,17 +63,15 @@ InsightScope 是一个前端为主的 AI 全栈项目，帮助产品 / 运营 / 
 > 依赖：Go、Node.js（仅用于 Vue/Vite）、MySQL 和 Redis。Go 后端沿用现有 `plfx` 数据库；迁移前先备份数据库。详细配置见 [Go 后端运行说明](go-backend/README.md)。
 
 ```powershell
-# 在 go-backend 目录，先按 go-backend/README.md 配置环境变量
-go run ./cmd/migrate
-# 另开三个终端，分别运行：
-go run ./cmd/api
-go run ./cmd/worker
-go run ./cmd/scheduler
+# 在 go-backend 目录，启动 MySQL 和 Redis 后一键启动 Go 后端
+.\start.cmd
 
 # 在 web 目录运行：
 npm install
 npm run dev
 ```
+
+后端启动脚本首次运行会生成并保存本地加密密钥，自动执行增量迁移并启动 API、Worker、Scheduler；停止时在 `go-backend` 目录运行 `.\stop.cmd`。详细说明见 [Go 后端运行说明](go-backend/README.md)。
 
 > 前端是纯 SPA（Vue 3 + Vite），`/api` 的转发只在开发期由 Vite 代理完成（见 `web/vite.config.ts` 的 `server.proxy`，
 > 目标地址取 `web/.env` 里的 `API_TARGET`，默认 `http://localhost:5176`）。

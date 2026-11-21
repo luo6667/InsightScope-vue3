@@ -65,7 +65,7 @@ func main() {
 	}
 	port := env("PORT", "5176")
 	rateLimit, _ := strconv.Atoi(os.Getenv("RATE_LIMIT_PER_MIN"))
-	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:5175,http://localhost:5176"), ",")
+	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5175,http://localhost:5176"), ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
 	}
