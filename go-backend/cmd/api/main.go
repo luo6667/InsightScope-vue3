@@ -38,6 +38,9 @@ func main() {
 	if err != nil {
 		log.Fatal("MySQL connection failed: ", err)
 	}
+	if !db.Migrator().HasTable("analysis_job_secrets") {
+		log.Fatal("run go run ./cmd/migrate before starting the API")
+	}
 	redisClient := redis.NewClient(&redis.Options{Addr: env("REDIS_ADDR", "127.0.0.1:6379"), Password: os.Getenv("REDIS_PASSWORD")})
 	defer redisClient.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
