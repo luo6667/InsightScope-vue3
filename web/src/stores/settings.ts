@@ -6,7 +6,7 @@ import { defineStore } from 'pinia'
  * 保存 AI 服务配置（baseUrl / apiKey / model / temperature）：
  * - Pinia 的 state + action 直接对应 zustand 的 state + setter，无额外样板代码；
  * - persist 把 state 写入 localStorage（key: insight-ai-settings），刷新页面不丢；
- * - apiKey 只存在浏览器本地，后端不落库。
+ * - 分析任务期间后端加密暂存 apiKey，任务结束后删除；流式报告仅在请求期间使用。
  */
 export interface AiConfig {
   baseUrl: string

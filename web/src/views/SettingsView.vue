@@ -75,7 +75,7 @@ const setTemperature = (v: string | number | undefined) => {
         <template #extra>
           <span class="flex items-center gap-1.5 text-xs text-ink-400">
             <ShieldCheck :size="12" />
-            key 仅存本浏览器
+            设置保存在本浏览器
           </span>
         </template>
       </CardHeader>
@@ -89,7 +89,7 @@ const setTemperature = (v: string | number | undefined) => {
         </Field>
         <Field
           label="API Key"
-          hint="分析时随任务传给本地后端，仅内存不落库"
+          hint="分析任务期间后端会加密暂存 Key，任务结束后删除"
           :error="keyInvalid ? 'key 混入了非 ASCII 字符，只保留 sk-... 那段' : undefined"
         >
           <Input v-model="draft.apiKey" type="password" placeholder="sk-..." />

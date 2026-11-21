@@ -198,3 +198,109 @@ func TestMySQLContractWithOriginalSchema(t *testing.T) {
 		t.Fatalf("reset comment: %+v %v", analyzed, err)
 	}
 }
+
+func TestAnalysisResumesAfterWorkerInterruption(t *testing.T) {
+	dsn := os.Getenv("GO_INTEGRATION_DSN")
+	if dsn == "" {
+		t.Skip("set GO_INTEGRATION_DSN for isolated MySQL test")
+	}
+	if !strings.Contains(dsn, "/plfx_go_it?") || os.Getenv("GO_INTEGRATION_REDIS") != "127.0.0.1:16379" {
+		t.Fatal("integration test requires isolated plfx_go_it and Redis 16379")
+	}
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:16379"})
+	defer redisClient.Close()
+	comments := make([]map[string]string, 16)
+	for i := range comments {
+		comments[i] = map[string]string{"content": "待分析评论" + strconv.Itoa(i)}
+	}
+	body, err := json.Marshal(map[string]any{"name": "Worker interruption contract", "comments": comments})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := Server{DB: db, StatsRedis: redisClient}
+	created := requestJSON(server, http.MethodPost, "/api/datasets", string(body))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create dataset: %d %s", created.Code, created.Body.String())
+	}
+	var dataset struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &dataset); err != nil {
+		t.Fatal(err)
+	}
+	defer requestJSON(server, http.MethodDelete, "/api/datasets/"+dataset.ID, "")
+	credentials, err := analysis.NewCredentials(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("r", 32))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := data.AnalysisJob{DatasetID: dataset.ID, Status: "pending", Total: 16, Concurrency: 1}
+	if err := db.Create(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int64
+	var interrupt context.CancelFunc
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 2 {
+			interrupt()
+			return
+		}
+		var input struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Messages) < 2 {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		lines := strings.Split(strings.TrimPrefix(input.Messages[1].Content, "评论列表：\n"), "\n")
+		results := make([]map[string]any, len(lines))
+		for i := range results {
+			results[i] = map[string]any{"sentiment": "pos", "sentimentScore": 0.7, "topics": []string{"体验"}, "keywords": []string{"好"}}
+		}
+		content, _ := json.Marshal(results)
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(content)}}}})
+	}))
+	defer model.Close()
+	nonce, ciphertext, err := credentials.Encrypt(job.ID, analysis.AIConfig{APIKey: "test", BaseURL: model.URL, Model: "fake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&data.AnalysisJobSecret{JobID: job.ID, Nonce: nonce, Ciphertext: ciphertext}).Error; err != nil {
+		t.Fatal(err)
+	}
+	task, err := tasks.Analysis(job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker := analysis.Worker{DB: db, Credentials: credentials, Model: analysis.LLM{Client: &http.Client{}}, Locks: analysis.RedisLocks{Redis: redisClient}, CacheVersioning: true}
+	ctx, cancel := context.WithCancel(context.Background())
+	interrupt = cancel
+	if err := worker.Handle(ctx, task); err == nil {
+		t.Fatal("interrupted worker unexpectedly completed")
+	}
+	var interrupted data.AnalysisJob
+	if err := db.First(&interrupted, job.ID).Error; err != nil || interrupted.Status != "running" || interrupted.Processed != 8 {
+		t.Fatalf("checkpoint after interruption: %+v %v", interrupted, err)
+	}
+	if err := worker.Handle(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	var finished data.AnalysisJob
+	if err := db.First(&finished, job.ID).Error; err != nil || finished.Status != "done" || finished.Processed != 16 {
+		var remaining int64
+		_ = db.Model(&data.Comment{}).Where("datasetId = ? AND analyzed = ?", dataset.ID, false).Count(&remaining).Error
+		t.Fatalf("resumed job: %+v %v, model requests=%d, remaining=%d", finished, err, requests.Load(), remaining)
+	}
+	var analyzed, secrets int64
+	if err := db.Model(&data.Comment{}).Where("datasetId = ? AND analyzed = ?", dataset.ID, true).Count(&analyzed).Error; err != nil || analyzed != 16 {
+		t.Fatalf("analyzed comments: %d %v", analyzed, err)
+	}
+	if err := db.Model(&data.AnalysisJobSecret{}).Where("jobId = ?", job.ID).Count(&secrets).Error; err != nil || secrets != 0 {
+		t.Fatalf("remaining secrets: %d %v", secrets, err)
+	}
+}

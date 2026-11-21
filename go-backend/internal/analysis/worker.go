@@ -202,7 +202,18 @@ func (w Worker) Handle(ctx context.Context, task *asynq.Task) error {
 		return updated.Error
 	}
 	if updated.RowsAffected == 0 {
-		return nil
+		// MySQL reports zero affected rows when a resumed running job already has
+		// the same status, total and failed count. Recheck its state before exiting.
+		current, err := w.loadJob(ctx, job.ID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if current.Status != "running" {
+			return nil
+		}
 	}
 	job.Status = "running"
 	job.Total = job.Processed + int(remaining)
