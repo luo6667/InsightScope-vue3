@@ -12,7 +12,11 @@
 | `GET /api/datasets/:id` | 返回数据集详情和评论计数 |
 | `GET /api/datasets/:id/comments` | 评论分页、时间、情感、主题及文字筛选 |
 | `GET /api/alerts/rules` | 返回告警规则，可按数据集筛选 |
+| `POST /api/alerts/rules` | 创建告警规则 |
+| `PATCH /api/alerts/rules/:id` | 修改告警规则 |
+| `DELETE /api/alerts/rules/:id` | 删除告警规则 |
 | `GET /api/alerts` | 返回告警列表，可按数据集筛选并设置 `limit`、`skip` |
+| `PATCH /api/alerts/:id/ack` | 确认告警 |
 
 本地试运行需先启动现有 MySQL，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`ACCESS_TOKEN`（可选）和 `PORT`（默认 5176），然后在本目录执行 `go run ./cmd/api`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
 

@@ -41,13 +41,15 @@ type Comment struct {
 func (Comment) TableName() string { return "comments" }
 
 type AlertRule struct {
-	ID        uint64  `gorm:"column:id;primaryKey"`
-	DatasetID string  `gorm:"column:datasetId"`
-	Type      string  `gorm:"column:type"`
-	Threshold float64 `gorm:"column:threshold"`
-	Keyword   string  `gorm:"column:keyword"`
-	WindowMin int     `gorm:"column:windowMin"`
-	Enabled   bool    `gorm:"column:enabled"`
+	ID        uint64    `gorm:"column:id;primaryKey"`
+	DatasetID string    `gorm:"column:datasetId"`
+	Type      string    `gorm:"column:type"`
+	Threshold float64   `gorm:"column:threshold"`
+	Keyword   string    `gorm:"column:keyword"`
+	WindowMin int       `gorm:"column:windowMin"`
+	Enabled   bool      `gorm:"column:enabled"`
+	CreatedAt time.Time `gorm:"column:createdAt"`
+	UpdatedAt time.Time `gorm:"column:updatedAt"`
 }
 
 func (AlertRule) TableName() string { return "alert_rules" }
@@ -61,6 +63,8 @@ type Alert struct {
 	Value        float64   `gorm:"column:value"`
 	TriggeredAt  time.Time `gorm:"column:triggeredAt"`
 	Acknowledged bool      `gorm:"column:acknowledged"`
+	CreatedAt    time.Time `gorm:"column:createdAt"`
+	UpdatedAt    time.Time `gorm:"column:updatedAt"`
 }
 
 func (Alert) TableName() string { return "alerts" }
