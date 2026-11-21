@@ -10,6 +10,7 @@
 | `GET /api/auth/status` | 返回访问口令是否启用 |
 | `GET /api/datasets` | 返回数据集列表和评论计数 |
 | `GET /api/datasets/:id` | 返回数据集详情和评论计数 |
+| `GET /api/datasets/:id/comments` | 评论分页、时间、情感、主题及文字筛选 |
 | `GET /api/alerts/rules` | 返回告警规则，可按数据集筛选 |
 | `GET /api/alerts` | 返回告警列表，可按数据集筛选并设置 `limit`、`skip` |
 
