@@ -16,9 +16,10 @@ import (
 )
 
 type Server struct {
-	DB          *gorm.DB
-	AccessToken string
-	HTTPClient  *http.Client
+	DB              *gorm.DB
+	AccessToken     string
+	HTTPClient      *http.Client
+	RealtimeHandler http.Handler
 }
 
 type datasetListRow struct {
@@ -41,6 +42,9 @@ type datasetListRow struct {
 func (s Server) Router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	if s.RealtimeHandler != nil {
+		r.Any("/socket.io/*path", gin.WrapH(s.RealtimeHandler))
+	}
 	r.GET("/healthz", func(c *gin.Context) {
 		db, err := s.DB.DB()
 		if err != nil || db.PingContext(c.Request.Context()) != nil {

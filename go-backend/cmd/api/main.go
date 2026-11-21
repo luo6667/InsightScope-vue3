@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
@@ -10,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"insightscope/go-backend/internal/api"
+	"insightscope/go-backend/internal/realtime"
 )
 
 func env(name, fallback string) string {
@@ -32,5 +34,11 @@ func main() {
 		log.Fatal("MySQL connection failed: ", err)
 	}
 	port := env("PORT", "5176")
-	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN")}.Router().Run(":" + port))
+	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:5175,http://localhost:5176"), ",")
+	for i := range origins {
+		origins[i] = strings.TrimSpace(origins[i])
+	}
+	socket := realtime.NewServer(db, os.Getenv("ACCESS_TOKEN"), origins)
+	defer socket.Close(nil)
+	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil)}.Router().Run(":" + port))
 }

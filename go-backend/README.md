@@ -1,6 +1,6 @@
 # Go 后端迁移：第一阶段
 
-本目录正在按 [迁移计划](../GO_REDIS_MIGRATION_PLAN.md) 替换 `server/`。目前实现了数据集与评论的部分接口、告警接口、健康检查和鉴权状态；前端仍由现有 Node 后端服务，暂时不要将 API 代理指向 Go。`go test ./...` 可以验证当前已实现的接口行为。
+本目录正在按 [迁移计划](../GO_REDIS_MIGRATION_PLAN.md) 替换 `server/`。目前实现了数据集与评论的部分接口、告警接口、健康检查、鉴权状态和 Socket.IO 连接；前端仍由现有 Node 后端服务，暂时不要将 API 代理指向 Go。`go test ./...` 可以验证当前已实现的接口行为。
 
 当前接口：
 
@@ -27,5 +27,7 @@
 | `POST /api/ai` | 使用用户配置的模型转发 SSE 流式报告 |
 
 本地试运行需先启动现有 MySQL，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`ACCESS_TOKEN`（可选）和 `PORT`（默认 5176），然后在本目录执行 `go run ./cmd/api`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
+
+Socket.IO 采用 [zishang520/socket.io](https://github.com/zishang520/socket.io) 的 Go 服务端，沿用前端已有的 `socket.io-client 4.x`、`auth.token`、`join-dataset` / `leave-dataset` 和数据集房间。`internal/realtime` 中的本地互通测试使用前端安装的 Node 客户端验证鉴权、加入与离开房间；运行该测试前需在 `web/` 安装依赖。`CORS_ORIGIN` 可配置逗号分隔的允许来源，默认是两个本地开发地址。后台任务的实时事件尚未接入发布链路。
 
 后续仍需完成分析任务、抓取与模拟、Socket.IO、Redis 任务、Worker、Scheduler、迁移脚本及真实 MySQL 契约回归；这些完成前不能移除 Node 后端。分析 Worker 接入时还需将运行中任务的取消动作接入数据集删除流程。
