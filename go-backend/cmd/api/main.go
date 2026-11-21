@@ -17,6 +17,7 @@ import (
 	"insightscope/go-backend/internal/alerts"
 	"insightscope/go-backend/internal/analysis"
 	"insightscope/go-backend/internal/api"
+	"insightscope/go-backend/internal/config"
 	"insightscope/go-backend/internal/realtime"
 	"insightscope/go-backend/internal/tasks"
 )
@@ -29,6 +30,9 @@ func env(name, fallback string) string {
 }
 
 func main() {
+	if err := config.CheckProduction(os.Getenv); err != nil {
+		log.Fatal("production config invalid: ", err)
+	}
 	// Existing Sequelize schema is deliberately read-only at startup.
 	dsn := (&mysqlDriver.Config{
 		User: env("MYSQL_USER", "root"), Passwd: env("MYSQL_PASSWORD", "1234"),
