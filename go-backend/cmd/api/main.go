@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
@@ -33,6 +35,13 @@ func main() {
 	if err != nil {
 		log.Fatal("MySQL connection failed: ", err)
 	}
+	redisClient := redis.NewClient(&redis.Options{Addr: env("REDIS_ADDR", "127.0.0.1:6379"), Password: os.Getenv("REDIS_PASSWORD")})
+	defer redisClient.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatal("Redis connection failed: ", err)
+	}
 	port := env("PORT", "5176")
 	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:5175,http://localhost:5176"), ",")
 	for i := range origins {
@@ -40,5 +49,5 @@ func main() {
 	}
 	socket := realtime.NewServer(db, os.Getenv("ACCESS_TOKEN"), origins)
 	defer socket.Close(nil)
-	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil)}.Router().Run(":" + port))
+	log.Fatal(api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}.Router().Run(":" + port))
 }

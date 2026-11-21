@@ -20,6 +20,7 @@ type Server struct {
 	AccessToken     string
 	HTTPClient      *http.Client
 	RealtimeHandler http.Handler
+	RedisPing       func(context.Context) error
 }
 
 type datasetListRow struct {
@@ -53,6 +54,7 @@ func (s Server) Router() *gin.Engine {
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true, "db": "up"})
 	})
+	r.GET("/readyz", s.readiness)
 	r.GET("/api/auth/status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"authRequired": s.AccessToken != ""})
 	})
