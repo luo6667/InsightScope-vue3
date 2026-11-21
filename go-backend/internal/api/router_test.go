@@ -31,3 +31,21 @@ func TestAccessStatusAndDatasetAuthentication(t *testing.T) {
 		t.Fatalf("dataset access without token = %d; want 401", denied.Code)
 	}
 }
+
+func TestUnknownAPIUsesJSONErrorAndSecurityHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := (Server{}).Router()
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/not-found", nil))
+	if w.Code != 404 || w.Body.String() != `{"error":"接口不存在"}` {
+		t.Fatalf("unknown API: %d %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Header().Get("Content-Security-Policy") == "" {
+		t.Fatalf("security headers: %+v", w.Header())
+	}
+	protected := httptest.NewRecorder()
+	(Server{AccessToken: "secret"}).Router().ServeHTTP(protected, httptest.NewRequest(http.MethodGet, "/api/not-found", nil))
+	if protected.Code != 401 {
+		t.Fatalf("unknown protected API: %d %s", protected.Code, protected.Body.String())
+	}
+}

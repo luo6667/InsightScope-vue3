@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +60,7 @@ func main() {
 		log.Fatal("analysis job recovery failed: ", err)
 	}
 	port := env("PORT", "5176")
+	rateLimit, _ := strconv.Atoi(os.Getenv("RATE_LIMIT_PER_MIN"))
 	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:5175,http://localhost:5176"), ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
@@ -70,7 +72,7 @@ func main() {
 	go (realtime.Bus{Redis: redisClient, Socket: socket}).Run(busContext)
 	publisher := realtime.Publisher{Redis: redisClient}
 	server := api.Server{DB: db, AccessToken: os.Getenv("ACCESS_TOKEN"), RealtimeHandler: socket.ServeHandler(nil), CORSOrigins: origins,
-		Credentials: credentials, Queue: tasks.Client{Queue: queue}, Events: publisher, FeedRedis: redisClient, Alerts: &alerts.Engine{DB: db, Events: publisher}, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
+		Credentials: credentials, Queue: tasks.Client{Queue: queue}, Events: publisher, FeedRedis: redisClient, Alerts: &alerts.Engine{DB: db, Events: publisher}, RateLimitPerMin: rateLimit, RedisPing: func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }}
 	server.Simulator = &api.Simulator{DB: db, Events: publisher, Alerts: server.Alerts}
 	go server.RunFeedScheduler(busContext)
 	log.Fatal(server.Router().Run(":" + port))

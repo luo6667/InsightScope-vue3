@@ -38,7 +38,7 @@
 | `PATCH /api/alerts/:id/ack` | 确认告警 |
 | `POST /api/ai` | 使用用户配置的模型转发 SSE 流式报告 |
 
-本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ANALYSIS_ENCRYPTION_KEY`（32 字节密钥的 Base64 编码）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）和 `PORT`（默认 5176），然后分别执行 `go run ./cmd/api` 与 `go run ./cmd/worker`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
+本地试运行需先启动现有 MySQL 和 Redis，并用环境变量配置 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、`REDIS_ADDR`（默认 `127.0.0.1:6379`）、`REDIS_PASSWORD`（可选）、`ANALYSIS_ENCRYPTION_KEY`（32 字节密钥的 Base64 编码）、`ACCESS_TOKEN`（可选）、`CORS_ORIGIN`（逗号分隔，默认本地前端地址）、`RATE_LIMIT_PER_MIN`（默认 0，关闭写接口限流）和 `PORT`（默认 5176），然后分别执行 `go run ./cmd/api` 与 `go run ./cmd/worker`。试运行时请改用其他 `PORT`，避免和现有 Node 后端冲突。当前服务不会自动创建或修改数据库表。
 
 新增的版本化数据库变更通过 `go run ./cmd/migrate` 手动执行。目前仅创建 `schema_migrations` 与 `analysis_job_secrets`，不会清空或重建旧数据；执行前仍应备份现有 MySQL。后台分析加密主密钥仅由服务端环境变量 `ANALYSIS_ENCRYPTION_KEY` 提供，不能写入前端环境变量或提交到 Git。分析任务投递到 Asynq 队列时只放任务 ID，凭据不进入 Redis。
 

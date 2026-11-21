@@ -32,6 +32,7 @@ type Server struct {
 	FeedRedis       *redis.Client
 	Alerts          *alerts.Engine
 	Simulator       *Simulator
+	RateLimitPerMin int
 }
 
 type datasetListRow struct {
@@ -54,7 +55,9 @@ type datasetListRow struct {
 func (s Server) Router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(securityHeaders())
 	r.Use(corsOrigins(s.CORSOrigins))
+	r.Use(s.writeLimit())
 	if s.RealtimeHandler != nil {
 		r.Any("/socket.io/*path", gin.WrapH(s.RealtimeHandler))
 	}
@@ -99,6 +102,17 @@ func (s Server) Router() *gin.Engine {
 	api.GET("/alerts", s.listAlerts)
 	api.PATCH("/alerts/:id/ack", s.ackAlert)
 	api.POST("/ai", s.streamAI)
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api") {
+			s.requireToken(c)
+			if c.IsAborted() {
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{"error": "接口不存在"})
+			return
+		}
+		c.Status(http.StatusNotFound)
+	})
 	return r
 }
 
