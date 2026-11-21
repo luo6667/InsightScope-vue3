@@ -54,6 +54,9 @@ func main() {
 	}
 	queue := asynq.NewClient(asynq.RedisClientOpt{Addr: env("REDIS_ADDR", "127.0.0.1:6379"), Password: os.Getenv("REDIS_PASSWORD")})
 	defer queue.Close()
+	if err := tasks.Recover(context.Background(), db, tasks.Client{Queue: queue}); err != nil {
+		log.Fatal("analysis job recovery failed: ", err)
+	}
 	port := env("PORT", "5176")
 	origins := strings.Split(env("CORS_ORIGIN", "http://localhost:5175,http://localhost:5176"), ",")
 	for i := range origins {
