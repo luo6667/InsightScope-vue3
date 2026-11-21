@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"insightscope/go-backend/internal/analysis"
@@ -27,6 +28,7 @@ type Server struct {
 	Credentials     analysis.Credentials
 	Queue           tasks.Enqueuer
 	Events          analysis.EventPublisher
+	FeedRedis       *redis.Client
 }
 
 type datasetListRow struct {
@@ -81,6 +83,9 @@ func (s Server) Router() *gin.Engine {
 	api.POST("/datasets/:id/analysis/resume", s.resumeAnalysis)
 	api.POST("/datasets/:id/analysis/cancel", s.cancelAnalysis)
 	api.POST("/datasets/:id/analysis/reset", s.resetAnalysis)
+	api.POST("/datasets/:id/feed/start", s.startFeed)
+	api.POST("/datasets/:id/feed/stop", s.stopFeed)
+	api.POST("/datasets/:id/feed/pull", s.pullFeed)
 	api.GET("/alerts/rules", s.listRules)
 	api.POST("/alerts/rules", s.createRule)
 	api.PATCH("/alerts/rules/:id", s.updateRule)
