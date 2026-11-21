@@ -17,6 +17,7 @@
 | `PATCH /api/datasets/:id/comments/:cid` | 人工修正评论情感与主题 |
 | `GET /api/datasets/:id/export` | 按列表筛选条件导出完整 CSV 或 JSON |
 | `GET /api/datasets/:id/stats` | 情感、主题、趋势和关键词统计 |
+| `GET /api/datasets/:id/analysis` | 返回数据集最新分析任务，尚无任务时返回 `null` |
 | `GET /api/alerts/rules` | 返回告警规则，可按数据集筛选 |
 | `POST /api/alerts/rules` | 创建告警规则 |
 | `PATCH /api/alerts/rules/:id` | 修改告警规则 |
